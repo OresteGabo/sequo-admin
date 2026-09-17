@@ -74,7 +74,7 @@ const navItems: NavItem[] = [
   { id: 'audit', label: 'Audit Logs', description: 'Immutable trace', icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01' },
   { id: 'webhooks', label: 'Payment Webhooks', description: 'Provider events', icon: 'M12 3v18M3 12h18M7 7l10 10M17 7 7 17' },
   { id: 'health', label: 'System Health', description: 'API readiness', icon: 'M3 12h4l2-6 4 12 2-6h6' },
-  { id: 'settings', label: 'Settings', description: 'Preferences', icon: 'M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z' },
+  { id: 'settings', label: 'Settings', description: 'Preferences', icon: 'M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5ZM19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.65V21.3a2.1 2.1 0 0 1-4.2 0v-.06a1.8 1.8 0 0 0-1.1-1.65 1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 0 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.65-1.1H2.7a2.1 2.1 0 0 1 0-4.2h.06A1.8 1.8 0 0 0 4.4 8.6a1.8 1.8 0 0 0-.36-1.98L4 6.58a2.1 2.1 0 0 1 2.97-2.97l.04.04A1.8 1.8 0 0 0 9 4.01a1.8 1.8 0 0 0 1.1-1.65V2.1a2.1 2.1 0 0 1 4.2 0v.26a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 0 1 2.97 2.97l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.1h.26a2.1 2.1 0 0 1 0 4.2h-.26A1.8 1.8 0 0 0 19.4 15Z' },
 ]
 
 const navGroups: NavGroup[] = [
