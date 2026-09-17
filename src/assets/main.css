@@ -163,6 +163,27 @@ button, input, select {
   scrollbar-width: thin;
 }
 
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.nav-group + .nav-group {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.nav-group-label {
+  padding: 0.2rem 0.75rem 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.61rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .nav-btn {
   display: flex;
   align-items: center;
@@ -573,9 +594,104 @@ button, input, select {
   filter: brightness(1.1);
 }
 
+.page-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.section-heading h2 {
+  margin: 0.15rem 0 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.section-heading p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.summary-strip span {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.summary-strip strong {
+  margin-right: 0.25rem;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.record-panel {
+  overflow: auto;
+}
+
+.record-panel .data-table {
+  min-width: 700px;
+}
+
+.table-row small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.compact-button {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.api-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.api-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1rem;
+}
+
+.api-card strong {
+  font-size: 1rem;
+}
+
+.api-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.api-card code {
+  margin-top: auto;
+  color: var(--primary);
+  font-size: 0.72rem;
+}
+
 @media (max-width: 1200px) {
   .bento-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .grid-split { grid-template-columns: 1fr; }
+  .api-cards { grid-template-columns: 1fr; }
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {
@@ -592,12 +708,18 @@ button, input, select {
   .brand-info,
   .role-box,
   .nav-text,
-  .user-details {
+  .user-details,
+  .nav-group-label {
     display: none;
   }
 
   .nav-links {
     width: 100%;
+  }
+
+  .nav-group + .nav-group {
+    margin-top: 0.35rem;
+    padding-top: 0.35rem;
   }
 
   .nav-btn {
