@@ -82,6 +82,12 @@ const query = ref('')
 const selectedRisk = ref<'All' | StatusTone>('All')
 const themeMode = ref<ThemeMode>(initialThemeMode)
 
+const isDarkMode = computed(() => themeMode.value.startsWith('dark'))
+
+function toggleTheme() {
+  themeMode.value = isDarkMode.value ? 'light' : 'dark'
+}
+
 watch(themeMode, (mode) => {
   window.localStorage.setItem('sequo-admin-theme', mode)
 })
@@ -309,6 +315,21 @@ const bottomNav = navItems.filter((item) => ['overview', 'operations', 'profiles
             </svg>
             <input id="search" v-model="query" type="search" placeholder="Search operations" />
           </label>
+          <button
+            class="theme-switch"
+            type="button"
+            :aria-label="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+            :title="isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+            @click="toggleTheme"
+          >
+            <svg v-if="isDarkMode" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20.4 15.3A8.2 8.2 0 0 1 8.7 3.6 8.4 8.4 0 1 0 20.4 15.3Z"></path>
+            </svg>
+          </button>
           <button class="profile-button" type="button">
             <img class="avatar avatar-photo" src="/profile/sample-profile.jpeg" alt="Oreste G. profile photo" />
             <span>
