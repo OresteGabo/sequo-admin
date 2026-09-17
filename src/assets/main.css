@@ -50,9 +50,10 @@ code {
   --muted: var(--md-sys-color-outline);
   --faint: var(--md-sys-color-outline);
   --paper: var(--md-sys-color-background);
-  --surface: var(--md-sys-color-surface-container-lowest);
-  --surface-2: var(--md-sys-color-surface-container);
-  --line: var(--md-sys-color-outline-variant);
+  --surface: color-mix(in srgb, var(--md-sys-color-surface-container-lowest) 86%, transparent);
+  --surface-solid: var(--md-sys-color-surface-container-lowest);
+  --surface-2: color-mix(in srgb, var(--md-sys-color-surface-container) 82%, transparent);
+  --line: color-mix(in srgb, var(--md-sys-color-outline-variant) 76%, transparent);
   --line-strong: var(--md-sys-color-outline);
   --nav: var(--md-sys-color-inverse-surface);
   --nav-soft: color-mix(in srgb, var(--md-sys-color-inverse-on-surface) 10%, var(--md-sys-color-inverse-surface));
@@ -68,11 +69,39 @@ code {
   --red: var(--md-sys-color-error);
   --red-soft: var(--md-sys-color-error-container);
   --slate-soft: var(--md-sys-color-surface-container);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 18px 38px rgba(0, 0, 0, 0.16);
-  background: var(--paper);
+  --depth-low:
+    8px 8px 22px color-mix(in srgb, var(--md-sys-color-shadow) 18%, transparent),
+    -6px -6px 18px color-mix(in srgb, var(--md-sys-color-inverse-on-surface) 5%, transparent);
+  --depth-high:
+    22px 24px 58px color-mix(in srgb, var(--md-sys-color-shadow) 24%, transparent),
+    -10px -10px 32px color-mix(in srgb, var(--md-sys-color-inverse-on-surface) 5%, transparent);
+  --inner-depth:
+    inset 1px 1px 0 color-mix(in srgb, var(--md-sys-color-inverse-on-surface) 12%, transparent),
+    inset -16px -16px 32px color-mix(in srgb, var(--md-sys-color-shadow) 5%, transparent);
+  --shadow-sm: var(--depth-low);
+  --shadow-md: var(--depth-high);
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent), transparent 31rem),
+    linear-gradient(25deg, color-mix(in srgb, var(--md-sys-color-tertiary) 15%, transparent), transparent 34rem),
+    linear-gradient(180deg, var(--paper), color-mix(in srgb, var(--md-sys-color-surface-container-low) 75%, var(--paper)));
   color: var(--ink);
   min-height: 100vh;
+}
+
+.admin-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--md-sys-color-outline-variant) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--md-sys-color-outline-variant) 18%, transparent) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 82%);
+  pointer-events: none;
 }
 
 .admin-shell.dark,
@@ -94,15 +123,21 @@ code {
 
 .sidebar {
   position: fixed;
-  inset: 0 auto 0 0;
+  inset: 0.9rem auto 0.9rem 0.9rem;
   z-index: 30;
   display: grid;
   width: 286px;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 1rem;
-  background: var(--nav);
+  border: 1px solid var(--nav-line);
+  border-radius: 8px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--nav-on) 8%, transparent), transparent 42%),
+    color-mix(in srgb, var(--nav) 90%, transparent);
   color: var(--nav-on);
   padding: 1rem 0.85rem;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(22px) saturate(1.15);
 }
 
 .brand {
@@ -129,8 +164,10 @@ code {
   height: 2.35rem;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--md-sys-color-primary) 20%, var(--surface-solid)), var(--surface-solid));
   color: var(--ink);
+  box-shadow: var(--depth-low);
 }
 
 .brand strong,
@@ -163,8 +200,11 @@ code {
   gap: 0.35rem;
   border: 1px solid var(--nav-line);
   border-radius: 8px;
-  background: var(--nav-soft);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--nav-on) 9%, transparent), transparent),
+    var(--nav-soft);
   padding: 0.75rem;
+  box-shadow: var(--inner-depth);
 }
 
 .role-switcher label {
@@ -218,8 +258,10 @@ code {
 }
 
 .nav-item.active {
-  background: var(--surface);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--md-sys-color-primary) 12%, var(--surface-solid)), var(--surface-solid));
   color: var(--ink);
+  box-shadow: var(--depth-low);
 }
 
 .nav-icon {
@@ -289,8 +331,11 @@ code {
   align-items: center;
   border: 1px solid var(--nav-line);
   border-radius: 8px;
-  background: var(--nav-soft);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--nav-on) 10%, transparent), transparent),
+    var(--nav-soft);
   padding: 0.65rem;
+  box-shadow: var(--inner-depth);
 }
 
 .avatar {
@@ -341,22 +386,26 @@ code {
 
 .workspace {
   min-width: 0;
-  margin-left: 286px;
+  margin-left: 318px;
 }
 
 .topbar {
   position: sticky;
-  top: 0;
+  top: 0.9rem;
   z-index: 20;
   display: flex;
   min-height: 4.25rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  width: calc(100% - clamp(1rem, 2.4vw, 2rem) * 2);
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-solid) 72%, transparent);
   padding: 0.7rem clamp(1rem, 2.4vw, 2rem);
-  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(18px) saturate(1.18);
 }
 
 .eyebrow {
@@ -390,7 +439,7 @@ code {
   min-height: 2.35rem;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-solid) 74%, transparent);
   padding: 0 0.65rem;
   color: var(--faint);
 }
@@ -414,6 +463,38 @@ code {
   font-size: 0.88rem;
 }
 
+.theme-switch {
+  display: grid;
+  width: 2.35rem;
+  height: 2.35rem;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-solid) 74%, transparent);
+  color: var(--ink-soft);
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.theme-switch:hover,
+.theme-switch:focus-visible {
+  border-color: var(--md-sys-color-primary);
+  background: var(--surface-2);
+  color: var(--ink);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.theme-switch svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .profile-button {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -422,7 +503,7 @@ code {
   min-height: 2.35rem;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-solid) 74%, transparent);
   padding: 0.18rem 0.6rem 0.18rem 0.22rem;
   text-align: left;
 }
@@ -448,7 +529,7 @@ code {
   gap: 1rem;
   width: min(100%, 1500px);
   margin: 0 auto;
-  padding: clamp(1rem, 2.4vw, 2rem);
+  padding: clamp(1.15rem, 2.6vw, 2.35rem) clamp(1rem, 2.4vw, 2rem);
   padding-bottom: 5rem;
 }
 
@@ -457,8 +538,9 @@ code {
 .metric-card {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-solid) 72%, transparent);
   box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(18px) saturate(1.08);
 }
 
 .command-strip {
@@ -468,6 +550,7 @@ code {
   align-items: center;
   min-height: 4.6rem;
   padding: 0.9rem 1rem;
+  box-shadow: var(--shadow-md);
 }
 
 .command-strip strong {
@@ -503,7 +586,7 @@ code {
   min-height: 2rem;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-solid) 70%, transparent);
   padding: 0 0.62rem;
   color: var(--muted);
   font-size: 0.78rem;
@@ -520,8 +603,10 @@ code {
 
 .filter-button.active {
   border-color: var(--nav);
-  background: var(--nav);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--md-sys-color-primary) 24%, var(--nav)), var(--nav));
   color: var(--nav-on);
+  box-shadow: var(--depth-low);
 }
 
 .metric-grid {
@@ -550,6 +635,7 @@ code {
   height: 4.25rem;
   border: 1px solid var(--line);
   border-radius: 10px;
+  box-shadow: var(--depth-low);
 }
 
 .settings-profile h2,
@@ -573,9 +659,10 @@ code {
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--md-sys-color-primary) 7%, transparent), transparent 58%),
-    var(--surface-2);
+    linear-gradient(135deg, color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent), transparent 58%),
+    color-mix(in srgb, var(--surface-solid) 62%, transparent);
   padding: 0.85rem;
+  box-shadow: var(--inner-depth);
 }
 
 .theme-options {
@@ -588,7 +675,7 @@ code {
   min-height: 2.35rem;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-solid) 70%, transparent);
   color: var(--ink-soft);
   padding: 0 0.65rem;
   font-weight: 800;
@@ -604,8 +691,10 @@ code {
 
 .theme-option.active {
   border-color: var(--md-sys-color-primary);
-  background: color-mix(in srgb, var(--md-sys-color-primary) 15%, var(--surface));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--surface-solid)), var(--surface-solid));
   color: var(--ink);
+  box-shadow: var(--depth-low);
 }
 
 .metric-card {
@@ -616,8 +705,8 @@ code {
   padding: 0.85rem;
   overflow: hidden;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--tone, var(--line-strong)) 8%, transparent), transparent 52%),
-    var(--surface);
+    linear-gradient(135deg, color-mix(in srgb, var(--tone, var(--line-strong)) 12%, transparent), transparent 52%),
+    color-mix(in srgb, var(--surface-solid) 68%, transparent);
 }
 
 .metric-card span {
@@ -716,6 +805,7 @@ code {
 
 .panel {
   overflow: hidden;
+  box-shadow: var(--shadow-md);
 }
 
 .panel-head {
@@ -751,8 +841,10 @@ code {
 }
 
 .primary-button {
-  background: var(--nav);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--nav)), var(--nav));
   color: var(--nav-on);
+  box-shadow: var(--depth-low);
 }
 
 .primary-button:hover,
@@ -764,7 +856,7 @@ code {
 
 .secondary-button {
   border: 1px solid var(--line-strong);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-solid) 70%, transparent);
   color: var(--ink-soft);
 }
 
@@ -787,8 +879,8 @@ code {
   align-items: center;
   padding: 0.9rem 1rem;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--tone) 7%, transparent), transparent 42%),
-    var(--surface);
+    linear-gradient(90deg, color-mix(in srgb, var(--tone) 8%, transparent), transparent 42%),
+    color-mix(in srgb, var(--surface-solid) 74%, transparent);
 }
 
 .work-item + .work-item {
@@ -867,7 +959,7 @@ code {
   gap: 0.18rem;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface-solid) 62%, transparent);
   padding: 0.7rem;
 }
 
@@ -888,7 +980,7 @@ code {
 }
 
 .rule-item.disabled {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-solid) 66%, transparent);
   opacity: 0.58;
 }
 
@@ -925,7 +1017,7 @@ code {
 
 .table-header {
   border-top: 0;
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface-solid) 56%, transparent);
   color: var(--muted);
   font-size: 0.68rem;
   font-weight: 860;
@@ -1000,6 +1092,11 @@ code {
 
   .topbar {
     position: static;
+    width: auto;
+    margin: 0;
+    border-radius: 0;
+    border-right: 0;
+    border-left: 0;
   }
 
   .main-grid,
