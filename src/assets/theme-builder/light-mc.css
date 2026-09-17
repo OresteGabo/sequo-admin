@@ -48,4 +48,14 @@
   --md-sys-color-surface-container: rgb(247 228 225);
   --md-sys-color-surface-container-high: rgb(235 217 214);
   --md-sys-color-surface-container-highest: rgb(223 206 203);
+
+  --md-sys-color-primary: rgb(30 84 60);
+  --md-sys-color-on-primary: rgb(255 255 255);
+  --md-sys-color-secondary: rgb(51 51 51);
+  --md-sys-color-tertiary: rgb(232 159 63);
+  --md-sys-color-error: rgb(231 76 60);
+  --md-sys-color-background: rgb(247 250 248);
+  --md-sys-color-on-background: rgb(51 51 51);
+  --md-sys-color-surface: rgb(247 250 248);
+  --md-sys-color-on-surface: rgb(51 51 51);
 }
