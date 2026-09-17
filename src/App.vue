@@ -37,6 +37,8 @@ type NavItem = {
   count?: number
 }
 type NavGroup = { label: string; items: NavItem[] }
+type WorkspaceRow = { values: string[]; tone: StatusTone }
+type WorkspaceConfig = { kicker: string; title: string; description: string; summary: Array<{ label: string; value: string }>; columns: string[]; rows: WorkspaceRow[] }
 
 const activeView = ref<ViewId>('overview')
 const activeRole = ref<Role>('Super admin')
@@ -142,7 +144,156 @@ const customers = [
   { name: 'Sena T.', id: 'CUS-07743', orders: '17', status: 'Under review', tone: 'danger' as StatusTone, lastSeen: '18 min ago' },
 ]
 
+const workspaceConfigs: Partial<Record<ViewId, WorkspaceConfig>> = {
+  operations: {
+    kicker: 'Operator queue', title: 'Operations', description: 'Resolve live exceptions before they become customer-facing incidents.',
+    summary: [{ value: '8', label: 'open queues' }, { value: '23', label: 'past SLA' }, { value: '4', label: 'unassigned' }],
+    columns: ['Queue', 'Issue', 'Status', 'Owner', 'Action'], rows: [
+      { values: ['OPS-301', 'Delivery shortfall · Lome North', 'Escalated', 'Nadia K.', 'Assign'], tone: 'danger' },
+      { values: ['OPS-298', 'Courier failed pickup PIN', 'Investigating', 'Mawuli S.', 'Open'], tone: 'warning' },
+      { values: ['OPS-294', 'Tokoin locker at 94% capacity', 'Watching', 'Hub team', 'Review'], tone: 'info' },
+    ],
+  },
+  missions: {
+    kicker: 'Courier control', title: 'Missions', description: 'Assign riders, resolve problems, and move deliveries through their next safe state.',
+    summary: [{ value: '184', label: 'active' }, { value: '16', label: 'paused riders' }, { value: '5', label: 'problem missions' }],
+    columns: ['Mission', 'Route', 'State', 'Courier', 'Action'], rows: [
+      { values: ['MIS-8821', 'Tokoin → Adidogome', 'Offer expired', 'Unassigned', 'Reassign'], tone: 'danger' },
+      { values: ['MIS-8817', 'Lome Central → Bè', 'At pickup', 'Rider K. Afi', 'Track'], tone: 'info' },
+      { values: ['MIS-8809', 'Kara Station → Centre', 'Accepted', 'A. Komlan', 'Inspect'], tone: 'good' },
+    ],
+  },
+  deliveries: {
+    kicker: 'Delivery board', title: 'Deliveries', description: 'Monitor direct, relay, pickup, and consolidation deliveries.',
+    summary: [{ value: '129', label: 'in transit' }, { value: '31', label: 'at relay' }, { value: '9', label: 'delayed' }],
+    columns: ['Delivery', 'Destination', 'Progress', 'Rider', 'Action'], rows: [
+      { values: ['DLV-4412', 'Hedzranawoé', 'Out for delivery', 'E. Mensah', 'Track'], tone: 'good' },
+      { values: ['DLV-4408', 'Agoè', 'Waiting at relay', 'Hub handoff', 'Release'], tone: 'info' },
+      { values: ['DLV-4399', 'Lome Port', 'Delayed 42 min', 'P. Kossi', 'Escalate'], tone: 'warning' },
+    ],
+  },
+  profiles: {
+    kicker: 'Validation desk', title: 'Profiles', description: 'Activate merchants, riders, and hub partners after identity and compliance review.',
+    summary: [{ value: '47', label: 'pending review' }, { value: '12', label: 'missing documents' }, { value: '6', label: 'high risk' }],
+    columns: ['Profile', 'Type', 'Status', 'Submitted', 'Action'], rows: [
+      { values: ['MER-418 · Akouvi Market', 'Merchant', 'KYC complete', 'Today · 09:42', 'Activate'], tone: 'good' },
+      { values: ['RID-2094 · K. Afi', 'Rider', 'ID image unclear', 'Today · 09:17', 'Review'], tone: 'warning' },
+      { values: ['HUB-018 · Atakpamé Locker', 'Relay partner', 'Awaiting agreement', 'Yesterday', 'Validate'], tone: 'info' },
+    ],
+  },
+  consolidations: {
+    kicker: 'Multi-shop fulfilment', title: 'Consolidations', description: 'Collect seller packages and dispatch one final delivery for the customer.',
+    summary: [{ value: '18', label: 'open manifests' }, { value: '7', label: 'awaiting seller' }, { value: '3', label: 'ready to dispatch' }],
+    columns: ['Manifest', 'Order', 'Packages', 'State', 'Action'], rows: [
+      { values: ['MAN-2409', 'ORD-80421', '3 / 3 collected', 'Ready for dispatch', 'Dispatch'], tone: 'good' },
+      { values: ['MAN-2408', 'ORD-80402', '1 / 2 collected', 'Waiting on merchant', 'Nudge'], tone: 'warning' },
+      { values: ['MAN-2404', 'ORD-80388', '2 / 2 collected', 'Problem reported', 'Resolve'], tone: 'danger' },
+    ],
+  },
+  relay: {
+    kicker: 'Parcel network', title: 'Relay parcels', description: 'Release pickups, monitor storage fees, and keep locker contents accountable.',
+    summary: [{ value: '316', label: 'stored parcels' }, { value: '21', label: 'due today' }, { value: '4', label: 'storage fees' }],
+    columns: ['Parcel', 'Hub', 'Locker', 'Status', 'Action'], rows: [
+      { values: ['PAR-7104 · ORD-80420', 'Tokoin Relay', 'L-14', 'Pickup code ready', 'Release'], tone: 'info' },
+      { values: ['PAR-7098 · ORD-80392', 'Lome Central', 'L-03', 'Overdue 2 days', 'Assess fee'], tone: 'warning' },
+      { values: ['PAR-7087 · ORD-80376', 'Kara Station', 'Counter', 'Problem reported', 'Inspect'], tone: 'danger' },
+    ],
+  },
+  returns: {
+    kicker: 'Reverse logistics', title: 'Returns and refunds', description: 'Confirm physical receipt before approving customer refunds.',
+    summary: [{ value: '11', label: 'awaiting receipt' }, { value: '6', label: 'at relay' }, { value: '3.2M', label: 'CFA pending' }],
+    columns: ['Return', 'Order', 'Requested', 'Status', 'Action'], rows: [
+      { values: ['RET-2041', 'ORD-80354', '12,500 CFA', 'At relay drop-off', 'Receive'], tone: 'info' },
+      { values: ['RET-2038', 'ORD-80291', '38,000 CFA', 'Receipt verified', 'Refund'], tone: 'good' },
+      { values: ['RET-2031', 'ORD-80188', '7,900 CFA', 'Condition disputed', 'Review'], tone: 'danger' },
+    ],
+  },
+  settlements: {
+    kicker: 'Finance control', title: 'Settlements', description: 'Evaluate eligible merchant payouts and inspect the immutable money ledger.',
+    summary: [{ value: '42', label: 'merchants ready' }, { value: '8.4M', label: 'CFA payable' }, { value: '2', label: 'held batches' }],
+    columns: ['Batch', 'Merchants', 'Amount', 'Status', 'Action'], rows: [
+      { values: ['SET-2026-09-17-A', '42 merchants', '8,420,000 CFA', 'Eligible', 'Evaluate'], tone: 'good' },
+      { values: ['SET-2026-09-16-B', '18 merchants', '2,180,500 CFA', 'Held for review', 'Inspect'], tone: 'warning' },
+      { values: ['LED-90081', 'Akouvi Market', '418,200 CFA', 'Ledger mismatch', 'Reconcile'], tone: 'danger' },
+    ],
+  },
+  commissions: {
+    kicker: 'Merchant finance', title: 'Commission overrides', description: 'Review exceptional merchant rates and record the reason for every change.',
+    summary: [{ value: '12', label: 'active overrides' }, { value: '3', label: 'expiring this week' }, { value: '0', label: 'unreviewed changes' }],
+    columns: ['Merchant', 'Default rate', 'Override', 'Updated', 'Action'], rows: [
+      { values: ['Akouvi Market · MER-418', '12%', '9% · launch period', 'Today · 08:31', 'Edit'], tone: 'info' },
+      { values: ['Kara Fresh · MER-377', '12%', '15% · cold chain', 'Yesterday', 'Review'], tone: 'warning' },
+      { values: ['Togolese Pantry · MER-392', '12%', 'None', '—', 'Set rate'], tone: 'neutral' },
+    ],
+  },
+  support: {
+    kicker: 'Service desk', title: 'Support investigations', description: 'Give agents the context to answer customers and hand off operational problems.',
+    summary: [{ value: '14', label: 'open tickets' }, { value: '3', label: 'waiting customer' }, { value: '2', label: 'escalated' }],
+    columns: ['Ticket', 'Customer', 'Topic', 'Priority', 'Action'], rows: [
+      { values: ['SUP-4421', 'Sena T.', 'Damaged parcel · ORD-80418', 'High', 'Open'], tone: 'danger' },
+      { values: ['SUP-4418', 'Koffi E.', 'Pickup code not received', 'Normal', 'Reply'], tone: 'info' },
+      { values: ['SUP-4409', 'Ama D.', 'Refund timing', 'Waiting customer', 'Follow up'], tone: 'warning' },
+    ],
+  },
+  users: {
+    kicker: 'Access control', title: 'Users and roles', description: 'Manage staff access, sessions, and the boundary between operations and finance.',
+    summary: [{ value: '28', label: 'staff accounts' }, { value: '4', label: 'roles' }, { value: '1', label: 'suspicious session' }],
+    columns: ['User', 'Role', 'Last sign-in', 'Access', 'Action'], rows: [
+      { values: ['Nadia K. · nadia@sequo.tg', 'Operations', 'Today · 09:51', 'Active', 'Edit'], tone: 'good' },
+      { values: ['Mawuli S. · mawuli@sequo.tg', 'Support', 'Today · 08:24', 'Active', 'View'], tone: 'info' },
+      { values: ['finance@sequo.tg', 'Finance', 'Yesterday · 17:42', 'Review needed', 'Secure'], tone: 'warning' },
+    ],
+  },
+  notifications: {
+    kicker: 'Message delivery', title: 'Notifications', description: 'Monitor customer, rider, merchant, and hub messages across push and in-app channels.',
+    summary: [{ value: '19', label: 'failed today' }, { value: '98.6%', label: 'delivered' }, { value: '6', label: 'muted events' }],
+    columns: ['Event', 'Audience', 'Channel', 'Status', 'Action'], rows: [
+      { values: ['DELIVERY_PROBLEM_REPORTED', 'Customer + support', 'Push + inbox', '19 retries', 'Retry'], tone: 'danger' },
+      { values: ['RELAY_PARCEL_DELAYED', 'Hub staff', 'Push', 'Delivered', 'Inspect'], tone: 'good' },
+      { values: ['RETURN_PIN_CREATED', 'Customer', 'SMS + inbox', 'Delivered', 'View'], tone: 'info' },
+    ],
+  },
+  audit: {
+    kicker: 'Traceability', title: 'Audit logs', description: 'Review who changed an operational state, when it happened, and which record was affected.',
+    summary: [{ value: '1,842', label: 'events today' }, { value: '0', label: 'tamper alerts' }, { value: '7', label: 'admin actions' }],
+    columns: ['Time', 'Actor', 'Event', 'Resource', 'Action'], rows: [
+      { values: ['09:51:42', 'Nadia K. · Operations', 'Courier paused', 'RID-2094', 'Inspect'], tone: 'warning' },
+      { values: ['09:47:08', 'System policy', 'Payment webhook accepted', 'CHK-18021', 'View'], tone: 'good' },
+      { values: ['09:39:15', 'Oreste G. · Admin', 'Refund approved', 'RET-2038', 'Inspect'], tone: 'info' },
+    ],
+  },
+  webhooks: {
+    kicker: 'Provider connectivity', title: 'Payment webhooks', description: 'Verify provider events, replay safe failures, and investigate mismatched references.',
+    summary: [{ value: '284', label: 'received today' }, { value: '281', label: 'accepted' }, { value: '3', label: 'needs review' }],
+    columns: ['Provider event', 'Reference', 'Amount', 'Status', 'Action'], rows: [
+      { values: ['Yas Togo · payment.completed', 'PAY-5560', '18,400 CFA', 'Accepted', 'View'], tone: 'good' },
+      { values: ['Moov Africa · payment.pending', 'PAY-5557', '9,800 CFA', 'Waiting', 'Monitor'], tone: 'warning' },
+      { values: ['Yas Togo · amount mismatch', 'PAY-5549', '42,000 CFA', 'Rejected', 'Investigate'], tone: 'danger' },
+    ],
+  },
+  health: {
+    kicker: 'Platform status', title: 'System health', description: 'Check API dependencies before operators trust the dashboard state.',
+    summary: [{ value: '99.98%', label: 'API uptime' }, { value: '184 ms', label: 'median latency' }, { value: '0', label: 'open incidents' }],
+    columns: ['Service', 'Region', 'Latency', 'Status', 'Action'], rows: [
+      { values: ['Sequo API', 'Lomé', '184 ms', 'Healthy', 'Inspect'], tone: 'good' },
+      { values: ['Yas Togo webhook', 'Provider edge', '412 ms', 'Degraded', 'Monitor'], tone: 'warning' },
+      { values: ['Notification queue', 'Lomé', '—', 'Retrying 19', 'Open'], tone: 'danger' },
+    ],
+  },
+  settings: {
+    kicker: 'Workspace preferences', title: 'Settings', description: 'Control your admin profile, display preferences, session security, and operator defaults.',
+    summary: [{ value: 'Super admin', label: 'current role' }, { value: 'Dark', label: 'theme' }, { value: '2', label: 'active sessions' }],
+    columns: ['Preference', 'Current value', 'Scope', 'Updated', 'Action'], rows: [
+      { values: ['Theme', 'Dark', 'This browser', 'Just now', 'Change'], tone: 'info' },
+      { values: ['Quick scan on open', 'Enabled', 'Hub workflows', 'Today · 08:12', 'Edit'], tone: 'good' },
+      { values: ['Session security', '2 active devices', 'Oreste G.', 'Today · 07:44', 'Review'], tone: 'warning' },
+    ],
+  },
+}
+
 const currentNav = computed<NavItem>(() => navItems.find(i => i.id === activeView.value) ?? navItems[0]!)
+const activeWorkspace = computed(() => workspaceConfigs[activeView.value])
+const mobileNavItems = computed(() => navItems.filter((item) => ['overview', 'orders', 'missions', 'claims', 'settings'].includes(item.id)))
 const filteredOrders = computed(() => {
   const q = query.value.trim().toLowerCase()
   if (!q) return orders
@@ -206,7 +357,7 @@ const filteredRows = computed(() => {
 
     <nav class="mobile-nav" aria-label="Mobile primary navigation">
       <button
-        v-for="item in navItems"
+        v-for="item in mobileNavItems"
         :key="item.id"
         class="mobile-nav-btn"
         :class="{ active: activeView === item.id }"
@@ -292,13 +443,10 @@ const filteredRows = computed(() => {
           <div class="panel record-panel"><div class="data-table"><div class="table-row table-header"><span>Customer</span><span>Orders</span><span>Account</span><span>Last seen</span><span>Action</span></div><div v-for="row in customers" :key="row.id" class="table-row"><div><strong>{{ row.name }}</strong><small>{{ row.id }}</small></div><div>{{ row.orders }}</div><div><span class="badge" :class="row.tone">{{ row.status }}</span></div><div>{{ row.lastSeen }}</div><div><button class="btn-primary compact-button">Open</button></div></div></div></div>
         </section>
 
-        <section v-else-if="activeView !== 'overview'" class="page-section api-page">
-          <div class="section-heading"><div><span class="eyebrow">API workspace</span><h2>{{ currentNav.label }}</h2><p>{{ currentNav.description }}. This workspace is ready for the corresponding protected Sequo API resource.</p></div><button class="btn-primary">Refresh data</button></div>
-          <div class="api-cards">
-            <article class="panel api-card"><span class="eyebrow">Read model</span><strong>Live resource view</strong><p>List records, inspect timelines, and filter by status or owner.</p><code>/api/{{ currentNav.id }}</code></article>
-            <article class="panel api-card"><span class="eyebrow">Operator actions</span><strong>Permission-aware controls</strong><p>Actions should be audited, idempotent where required, and limited by role.</p><code>Bearer access token</code></article>
-            <article class="panel api-card"><span class="eyebrow">Safety state</span><strong>Protected admin surface</strong><p>Errors, rate limits, and destructive actions remain explicit before API wiring.</p><code>403 · 409 · 429</code></article>
-          </div>
+        <section v-else-if="activeWorkspace" class="page-section workspace-page">
+          <div class="section-heading"><div><span class="eyebrow">{{ activeWorkspace.kicker }}</span><h2>{{ activeWorkspace.title }}</h2><p>{{ activeWorkspace.description }}</p></div><div class="heading-actions"><button class="btn-secondary">Export</button><button class="btn-primary">Add record</button></div></div>
+          <div class="summary-strip"><span v-for="item in activeWorkspace.summary" :key="item.label"><strong>{{ item.value }}</strong> {{ item.label }}</span></div>
+          <div class="panel record-panel workspace-table"><div class="data-table"><div class="table-row table-header"><span v-for="column in activeWorkspace.columns" :key="column">{{ column }}</span></div><div v-for="row in activeWorkspace.rows" :key="row.values[0]" class="table-row"><div v-for="(value, index) in row.values" :key="`${row.values[0]}-${index}`"><span v-if="index === 2" class="badge" :class="row.tone">{{ value }}</span><button v-else-if="index === row.values.length - 1" class="btn-primary compact-button">{{ value }}</button><span v-else>{{ value }}</span></div></div></div></div>
         </section>
 
         <section v-if="activeView === 'overview'" class="bento-metrics">
