@@ -92,6 +92,17 @@ type BusinessParameter = {
   writeState: 'read-only' | 'backend endpoint needed'
 }
 
+type AdminUserRow = {
+  id: string
+  email?: string | null
+  phoneNumber?: string | null
+  displayName?: string | null
+  provider: string
+  status: string
+  active: boolean
+  roles: RoleCode[]
+}
+
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
@@ -104,6 +115,11 @@ const dashboardLoading = ref(false)
 const dashboardError = ref('')
 const dashboardOverview = ref<AdminOverview | null>(null)
 const dashboardSnapshot = ref<AdminOperationsSnapshot | null>(null)
+const usersLoading = ref(false)
+const usersError = ref('')
+const userSearch = ref('')
+const userRoleFilter = ref<'ALL' | RoleCode>('ALL')
+const adminUsers = ref<AdminUserRow[]>([])
 const deviceId = getOrCreateDeviceId()
 const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
 const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
@@ -286,10 +302,34 @@ const businessParameters: BusinessParameter[] = [
   { label: 'Categories excluded from relay/returns', value: 'Policy-backed category rules', source: 'relay / returns policy', writeState: 'backend endpoint needed' },
 ]
 
+const roleOptions: Array<'ALL' | RoleCode> = ['ALL', 'CUSTOMER', 'COURIER', 'MERCHANT_OWNER', 'MERCHANT_STAFF', 'RELAY_PARTNER', 'SUPPORT_AGENT', 'ADMIN', 'SUPER_ADMIN']
+const localDemoUsers: AdminUserRow[] = [
+  { id: 'local-customer', email: 'customer@example.test', displayName: 'Customer account', provider: 'GOOGLE', status: 'ACTIVE', active: true, roles: ['CUSTOMER'] },
+  { id: 'local-courier', email: 'courier@example.test', displayName: 'Courier account', provider: 'GOOGLE', status: 'ACTIVE', active: true, roles: ['COURIER'] },
+  { id: 'local-merchant', email: 'merchant@example.test', displayName: 'Merchant owner', provider: 'GOOGLE', status: 'ACTIVE', active: true, roles: ['MERCHANT_OWNER'] },
+  { id: 'local-admin-user', email: 'admin@example.test', displayName: 'SEQUO admin', provider: 'EMAIL', status: 'ACTIVE', active: true, roles: ['ADMIN'] },
+  { id: 'local-relay', email: 'relay@example.test', displayName: 'Relay partner', provider: 'GOOGLE', status: 'ACTIVE', active: true, roles: ['RELAY_PARTNER'] },
+]
+const displayedUsers = computed(() => {
+  const source = adminUsers.value.length > 0 ? adminUsers.value : localDemoUsers
+  const query = userSearch.value.trim().toLowerCase()
+  return source
+    .filter((user) => userRoleFilter.value === 'ALL' || user.roles.includes(userRoleFilter.value))
+    .filter((user) => {
+      if (!query) return true
+      return [user.email, user.phoneNumber, user.displayName, user.id, user.provider, user.status, user.roles.join(' ')]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    })
+})
+
 function selectSection(section: SectionId) {
   activeSection.value = section
   if (section === 'dashboard' && isAuthenticated.value) {
     void loadDashboard()
+  }
+  if (section === 'users' && isAuthenticated.value) {
+    void loadUsers()
   }
 }
 
@@ -318,11 +358,25 @@ async function verifySession() {
     currentUser.value = user
     persistTokens()
     await loadDashboard()
+    await loadUsers()
   } catch {
     currentUser.value = null
     authError.value = 'We could not verify this admin session.'
   } finally {
     authLoading.value = false
+  }
+}
+
+async function loadUsers() {
+  usersLoading.value = true
+  usersError.value = ''
+  try {
+    adminUsers.value = await apiRequest<AdminUserRow[]>('/api/admin/web/users')
+  } catch {
+    adminUsers.value = []
+    usersError.value = 'Live users are unavailable. Showing local demo accounts.'
+  } finally {
+    usersLoading.value = false
   }
 }
 
@@ -411,6 +465,7 @@ function useMockLogin() {
   }
   authError.value = ''
   void loadDashboard()
+  void loadUsers()
 }
 
 function formatCount(value: number): string {
@@ -542,6 +597,45 @@ function getOrCreateDeviceId(): string {
                 <p>{{ card.detail }}</p>
               </article>
             </div>
+          </article>
+
+          <article v-else-if="active.id === 'users'" class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Accounts</p>
+                <h2>Users and roles</h2>
+              </div>
+              <button class="secondary" type="button" :disabled="usersLoading" @click="loadUsers">
+                {{ usersLoading ? 'Refreshing...' : 'Refresh' }}
+              </button>
+            </div>
+            <p v-if="usersError" class="error-text">{{ usersError }}</p>
+            <div class="filters">
+              <input v-model="userSearch" type="search" placeholder="Search users, email, provider, role" />
+              <select v-model="userRoleFilter" aria-label="Filter users by role">
+                <option v-for="role in roleOptions" :key="role" :value="role">{{ role }}</option>
+              </select>
+            </div>
+            <div class="table" role="table" aria-label="Users and roles">
+              <div class="table-row users-row table-head" role="row">
+                <span role="columnheader">User</span>
+                <span role="columnheader">Provider</span>
+                <span role="columnheader">Roles</span>
+                <span role="columnheader">State</span>
+              </div>
+              <div v-for="user in displayedUsers" :key="user.id" class="table-row users-row" role="row">
+                <span role="cell">
+                  <strong>{{ user.displayName || user.email || user.phoneNumber || user.id }}</strong>
+                  <small>{{ user.email || user.phoneNumber || user.id }}</small>
+                </span>
+                <span role="cell">{{ user.provider }}</span>
+                <span role="cell">{{ user.roles.join(', ') }}</span>
+                <span role="cell">{{ user.active ? user.status : 'INACTIVE' }}</span>
+              </div>
+            </div>
+            <p>
+              Role mutation, suspension, password reset and session-revocation controls are disabled until dedicated admin endpoints exist.
+            </p>
           </article>
 
           <article v-else-if="active.id === 'settings'" class="panel">

@@ -173,6 +173,16 @@ input {
   background: var(--paper);
 }
 
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+}
+
 button {
   border: 0;
   border-radius: 8px;
@@ -361,6 +371,25 @@ code {
   border-top: 1px solid var(--line);
 }
 
+.table-row.users-row {
+  grid-template-columns: minmax(0, 1.4fr) 0.7fr minmax(0, 1.2fr) 0.7fr;
+}
+
+.table-row strong,
+.table-row small {
+  display: block;
+}
+
+.table-row small {
+  color: var(--muted);
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 12px;
+}
+
 .table-row:first-child {
   border-top: 0;
 }
@@ -397,6 +426,7 @@ ul {
 
   .table-row,
   .setting-row,
+  .filters,
   .panel-heading,
   .topbar {
     grid-template-columns: 1fr;
