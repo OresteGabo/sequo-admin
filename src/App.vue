@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 type SectionId =
   | 'dashboard'
@@ -20,11 +20,45 @@ type Section = {
   description: string
 }
 
+type RoleCode =
+  | 'CUSTOMER'
+  | 'MERCHANT_OWNER'
+  | 'MERCHANT_STAFF'
+  | 'COURIER'
+  | 'RELAY_PARTNER'
+  | 'SUPPORT_AGENT'
+  | 'ADMIN'
+  | 'SUPER_ADMIN'
+
+type CurrentUser = {
+  id: string
+  email?: string | null
+  phoneNumber?: string | null
+  displayName?: string | null
+  avatarUrl?: string | null
+  provider: string
+  status: string
+  active: boolean
+  roles: RoleCode[]
+}
+
+type AuthTokens = {
+  accessToken: string
+  refreshToken: string
+  expiresIn: number
+}
+
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
 const accessToken = ref('')
-const isAuthenticated = computed(() => accessToken.value.trim().length > 0)
+const refreshToken = ref('')
+const currentUser = ref<CurrentUser | null>(null)
+const authError = ref('')
+const authLoading = ref(false)
+const deviceId = getOrCreateDeviceId()
+const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
+const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
 
 const sections: Section[] = [
   {
@@ -96,7 +130,7 @@ const defaultSection = sections[0] as Section
 const active = computed<Section>(() => sections.find((section) => section.id === activeSection.value) ?? defaultSection)
 const metrics = computed(() => [
   { label: 'API base', value: apiBaseUrl.replace(/^https?:\/\//, '') },
-  { label: 'Auth mode', value: isAuthenticated.value ? 'Bearer token set' : 'Login required' },
+  { label: 'Auth mode', value: isAuthenticated.value ? 'Admin verified' : 'Login required' },
   { label: 'Endpoint', value: active.value.endpoint },
 ])
 
@@ -144,13 +178,129 @@ function selectSection(section: SectionId) {
   activeSection.value = section
 }
 
+onMounted(() => {
+  accessToken.value = sessionStorage.getItem('sequo_admin_access_token') ?? ''
+  refreshToken.value = sessionStorage.getItem('sequo_admin_refresh_token') ?? ''
+  if (accessToken.value) {
+    void verifySession()
+  }
+})
+
+async function verifySession() {
+  if (!accessToken.value.trim()) {
+    authError.value = 'Add an access token before continuing.'
+    return
+  }
+  authLoading.value = true
+  authError.value = ''
+  try {
+    const user = await apiRequest<CurrentUser>('/api/auth/me')
+    if (!user.active || !user.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')) {
+      currentUser.value = null
+      authError.value = 'This account is not allowed to use SEQUO Admin.'
+      return
+    }
+    currentUser.value = user
+    persistTokens()
+  } catch {
+    currentUser.value = null
+    authError.value = 'We could not verify this admin session.'
+  } finally {
+    authLoading.value = false
+  }
+}
+
+async function apiRequest<T>(path: string, retryAfterRefresh = true): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken.value}`,
+    },
+  })
+  if (response.status === 401 && retryAfterRefresh && refreshToken.value) {
+    const refreshed = await refreshSession()
+    if (refreshed) return apiRequest<T>(path, false)
+  }
+  if (!response.ok) throw new Error('request_failed')
+  return response.json() as Promise<T>
+}
+
+async function refreshSession(): Promise<boolean> {
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken: refreshToken.value, deviceId }),
+    })
+    if (!response.ok) return false
+    const tokens = (await response.json()) as AuthTokens
+    accessToken.value = tokens.accessToken
+    refreshToken.value = tokens.refreshToken
+    persistTokens()
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function signOut() {
+  const tokenToRevoke = refreshToken.value
+  clearSession()
+  if (tokenToRevoke) {
+    await fetch(`${apiBaseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken: tokenToRevoke }),
+    }).catch(() => undefined)
+  }
+}
+
 function useMockLogin() {
   email.value = email.value || 'admin@sequo.internal'
   accessToken.value = 'local-admin-token'
+  refreshToken.value = ''
+  currentUser.value = {
+    id: 'local-admin',
+    email: email.value,
+    displayName: 'Local SEQUO Admin',
+    provider: 'LOCAL_DEV',
+    status: 'ACTIVE',
+    active: true,
+    roles: ['SUPER_ADMIN'],
+  }
+  authError.value = ''
 }
 
-function signOut() {
+function persistTokens() {
+  sessionStorage.setItem('sequo_admin_access_token', accessToken.value)
+  if (refreshToken.value) {
+    sessionStorage.setItem('sequo_admin_refresh_token', refreshToken.value)
+  } else {
+    sessionStorage.removeItem('sequo_admin_refresh_token')
+  }
+}
+
+function clearSession() {
   accessToken.value = ''
+  refreshToken.value = ''
+  currentUser.value = null
+  authError.value = ''
+  sessionStorage.removeItem('sequo_admin_access_token')
+  sessionStorage.removeItem('sequo_admin_refresh_token')
+}
+
+function getOrCreateDeviceId(): string {
+  const existing = localStorage.getItem('sequo_admin_device_id')
+  if (existing) return existing
+  const generated = `sequo-admin-web-${crypto.randomUUID()}`
+  localStorage.setItem('sequo_admin_device_id', generated)
+  return generated
 }
 </script>
 
@@ -186,7 +336,10 @@ function signOut() {
           <p class="eyebrow">Contract MVP admin</p>
           <h1>{{ active.label }}</h1>
         </div>
-        <button v-if="isAuthenticated" class="secondary" type="button" @click="signOut">Sign out</button>
+        <div v-if="isAuthenticated" class="account-chip">
+          <span>{{ currentUser?.displayName || currentUser?.email || 'SEQUO Admin' }}</span>
+          <button class="secondary" type="button" @click="signOut">Sign out</button>
+        </div>
       </header>
 
       <section v-if="!isAuthenticated" class="login-panel" aria-label="Admin login">
@@ -194,8 +347,8 @@ function signOut() {
           <p class="eyebrow">Secure entry</p>
           <h2>Sign in with a SEQUO admin account</h2>
           <p>
-            This shell is ready for the backend auth integration. For local development, use the mocked token to inspect the
-            operational screens without storing secrets in the frontend.
+            Paste a backend access token to verify `/api/auth/me`. Add a refresh token only for local development when you want
+            one refresh-and-retry attempt. Tokens stay in session storage and are cleared on sign out.
           </p>
         </div>
         <label>
@@ -206,7 +359,17 @@ function signOut() {
           Access token
           <input v-model="accessToken" type="password" autocomplete="off" placeholder="Paste a local bearer token" />
         </label>
-        <button type="button" @click="useMockLogin">Use local mock login</button>
+        <label>
+          Refresh token
+          <input v-model="refreshToken" type="password" autocomplete="off" placeholder="Optional local refresh token" />
+        </label>
+        <p v-if="authError" class="error-text">{{ authError }}</p>
+        <div class="login-actions">
+          <button type="button" :disabled="authLoading" @click="verifySession">
+            {{ authLoading ? 'Verifying...' : 'Verify admin session' }}
+          </button>
+          <button class="secondary" type="button" @click="useMockLogin">Use local mock login</button>
+        </div>
       </section>
 
       <template v-else>

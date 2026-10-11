@@ -188,6 +188,37 @@ button.secondary {
   color: var(--ink);
 }
 
+button:disabled {
+  cursor: progress;
+  opacity: 0.64;
+}
+
+.account-chip,
+.login-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.account-chip span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 8px 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.error-text {
+  border: 1px solid #f0b7ad;
+  border-radius: 8px;
+  background: #fff1ef;
+  color: #9d2f20;
+  padding: 10px 12px;
+  font-weight: 700;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
