@@ -103,6 +103,17 @@ type AdminUserRow = {
   roles: RoleCode[]
 }
 
+type AdminMerchantRow = {
+  id: string
+  ownerUserId?: string | null
+  name: string
+  status: string
+  commissionRateBps: number
+  walletProvider?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
@@ -120,6 +131,11 @@ const usersError = ref('')
 const userSearch = ref('')
 const userRoleFilter = ref<'ALL' | RoleCode>('ALL')
 const adminUsers = ref<AdminUserRow[]>([])
+const merchantsLoading = ref(false)
+const merchantsError = ref('')
+const merchantSearch = ref('')
+const selectedMerchantId = ref('')
+const adminMerchants = ref<AdminMerchantRow[]>([])
 const deviceId = getOrCreateDeviceId()
 const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
 const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
@@ -322,6 +338,22 @@ const displayedUsers = computed(() => {
         .some((value) => String(value).toLowerCase().includes(query))
     })
 })
+const localDemoMerchants: AdminMerchantRow[] = [
+  { id: 'merchant-akouvi', ownerUserId: 'local-merchant', name: 'Akouvi Market', status: 'ACTIVE', commissionRateBps: 1500, walletProvider: 'YAS_TOGO' },
+  { id: 'merchant-kara', ownerUserId: 'local-merchant-2', name: 'Kara Fresh', status: 'PAUSED', commissionRateBps: 1200, walletProvider: 'MOOV_AFRICA' },
+  { id: 'merchant-pantry', ownerUserId: 'local-merchant-3', name: 'Togolese Pantry', status: 'PENDING_REVIEW', commissionRateBps: 1500, walletProvider: null },
+]
+const displayedMerchants = computed(() => {
+  const source = adminMerchants.value.length > 0 ? adminMerchants.value : localDemoMerchants
+  const query = merchantSearch.value.trim().toLowerCase()
+  return source.filter((merchant) => {
+    if (!query) return true
+    return [merchant.id, merchant.name, merchant.status, merchant.walletProvider, merchant.ownerUserId]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query))
+  })
+})
+const selectedMerchant = computed(() => displayedMerchants.value.find((merchant) => merchant.id === selectedMerchantId.value) ?? displayedMerchants.value[0] ?? null)
 
 function selectSection(section: SectionId) {
   activeSection.value = section
@@ -330,6 +362,9 @@ function selectSection(section: SectionId) {
   }
   if (section === 'users' && isAuthenticated.value) {
     void loadUsers()
+  }
+  if (section === 'merchants' && isAuthenticated.value) {
+    void loadMerchants()
   }
 }
 
@@ -359,11 +394,27 @@ async function verifySession() {
     persistTokens()
     await loadDashboard()
     await loadUsers()
+    await loadMerchants()
   } catch {
     currentUser.value = null
     authError.value = 'We could not verify this admin session.'
   } finally {
     authLoading.value = false
+  }
+}
+
+async function loadMerchants() {
+  merchantsLoading.value = true
+  merchantsError.value = ''
+  try {
+    adminMerchants.value = await apiRequest<AdminMerchantRow[]>('/api/admin/web/merchants')
+    selectedMerchantId.value = adminMerchants.value[0]?.id ?? ''
+  } catch {
+    adminMerchants.value = []
+    selectedMerchantId.value = localDemoMerchants[0]?.id ?? ''
+    merchantsError.value = 'Live merchants are unavailable. Showing local demo merchants.'
+  } finally {
+    merchantsLoading.value = false
   }
 }
 
@@ -466,6 +517,7 @@ function useMockLogin() {
   authError.value = ''
   void loadDashboard()
   void loadUsers()
+  void loadMerchants()
 }
 
 function formatCount(value: number): string {
@@ -636,6 +688,54 @@ function getOrCreateDeviceId(): string {
             <p>
               Role mutation, suspension, password reset and session-revocation controls are disabled until dedicated admin endpoints exist.
             </p>
+          </article>
+
+          <article v-else-if="active.id === 'merchants'" class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Commerce operations</p>
+                <h2>Merchants</h2>
+              </div>
+              <button class="secondary" type="button" :disabled="merchantsLoading" @click="loadMerchants">
+                {{ merchantsLoading ? 'Refreshing...' : 'Refresh' }}
+              </button>
+            </div>
+            <p v-if="merchantsError" class="error-text">{{ merchantsError }}</p>
+            <input v-model="merchantSearch" type="search" placeholder="Search merchant, owner, status, wallet" />
+            <div class="split-panel">
+              <div class="table" role="table" aria-label="Merchant list">
+                <div class="table-row merchant-row table-head" role="row">
+                  <span role="columnheader">Merchant</span>
+                  <span role="columnheader">Commission</span>
+                  <span role="columnheader">Status</span>
+                </div>
+                <button
+                  v-for="merchant in displayedMerchants"
+                  :key="merchant.id"
+                  class="table-row merchant-row selectable-row"
+                  type="button"
+                  @click="selectedMerchantId = merchant.id"
+                >
+                  <span>
+                    <strong>{{ merchant.name }}</strong>
+                    <small>{{ merchant.id }}</small>
+                  </span>
+                  <span>{{ (merchant.commissionRateBps / 100).toFixed(2) }}%</span>
+                  <span>{{ merchant.status }}</span>
+                </button>
+              </div>
+              <aside v-if="selectedMerchant" class="detail-card">
+                <p class="eyebrow">Merchant detail</p>
+                <h3>{{ selectedMerchant.name }}</h3>
+                <dl>
+                  <div><dt>Owner</dt><dd>{{ selectedMerchant.ownerUserId || 'Not available' }}</dd></div>
+                  <div><dt>Wallet</dt><dd>{{ selectedMerchant.walletProvider || 'Not configured' }}</dd></div>
+                  <div><dt>Catalog status</dt><dd>Read endpoint available; product mutation endpoint required</dd></div>
+                  <div><dt>Product count</dt><dd>Backend aggregate endpoint needed</dd></div>
+                </dl>
+                <button type="button" disabled>Activate/deactivate products: backend endpoint needed</button>
+              </aside>
+            </div>
           </article>
 
           <article v-else-if="active.id === 'settings'" class="panel">

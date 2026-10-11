@@ -375,6 +375,26 @@ code {
   grid-template-columns: minmax(0, 1.4fr) 0.7fr minmax(0, 1.2fr) 0.7fr;
 }
 
+.table-row.merchant-row {
+  grid-template-columns: minmax(0, 1.3fr) 0.7fr 0.8fr;
+}
+
+.selectable-row {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 12px;
+  text-align: left;
+  font-weight: inherit;
+}
+
+.selectable-row:hover {
+  background: var(--paper);
+}
+
 .table-row strong,
 .table-row small {
   display: block;
@@ -388,6 +408,44 @@ code {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px;
   gap: 12px;
+}
+
+.split-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+}
+
+.detail-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.detail-card h3 {
+  margin: 0;
+}
+
+dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+dd {
+  margin: 0;
+  font-weight: 700;
 }
 
 .table-row:first-child {
@@ -420,7 +478,8 @@ ul {
 
   .metrics,
   .content-grid,
-  .dashboard-grid {
+  .dashboard-grid,
+  .split-panel {
     grid-template-columns: 1fr;
   }
 
