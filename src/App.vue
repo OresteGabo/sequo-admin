@@ -48,6 +48,43 @@ type AuthTokens = {
   expiresIn: number
 }
 
+type AdminOverview = {
+  totals?: {
+    orders?: number
+  }
+}
+
+type AdminOperationsSnapshot = {
+  deliveryCapacity?: {
+    activeMissions?: number
+    pausedCouriers?: number
+    problemMissions?: unknown[]
+  }
+  merchantFulfillment?: {
+    sellerBacklog?: number
+    readyForPickup?: number
+  }
+  relayOperations?: {
+    delayedParcels?: number
+    problemParcels?: number
+  }
+  payoutQueue?: {
+    merchantPayoutCandidates?: number
+  }
+  returnBottlenecks?: {
+    returnsWaitingRelayAction?: number
+    returnsWaitingSequoCollection?: number
+    returnsInProblem?: number
+  }
+}
+
+type DashboardCard = {
+  label: string
+  value: string
+  detail: string
+  source: 'API' | 'Local demo'
+}
+
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
@@ -56,6 +93,10 @@ const refreshToken = ref('')
 const currentUser = ref<CurrentUser | null>(null)
 const authError = ref('')
 const authLoading = ref(false)
+const dashboardLoading = ref(false)
+const dashboardError = ref('')
+const dashboardOverview = ref<AdminOverview | null>(null)
+const dashboardSnapshot = ref<AdminOperationsSnapshot | null>(null)
 const deviceId = getOrCreateDeviceId()
 const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
 const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
@@ -174,8 +215,61 @@ const mockRows: Record<SectionId, string[][]> = {
   ],
 }
 
+const dashboardCards = computed<DashboardCard[]>(() => {
+  const snapshot = dashboardSnapshot.value
+  const overview = dashboardOverview.value
+  const source: DashboardCard['source'] = snapshot || overview ? 'API' : 'Local demo'
+  return [
+    {
+      label: 'Pending orders',
+      value: formatCount(overview?.totals?.orders ?? 0),
+      detail: overview ? 'Total order records in admin overview' : 'Waiting for admin overview endpoint',
+      source,
+    },
+    {
+      label: 'Merchant packages waiting',
+      value: formatCount(snapshot?.merchantFulfillment?.sellerBacklog ?? 7),
+      detail: `${formatCount(snapshot?.merchantFulfillment?.readyForPickup ?? 3)} ready for pickup`,
+      source,
+    },
+    {
+      label: 'Active deliveries',
+      value: formatCount(snapshot?.deliveryCapacity?.activeMissions ?? 12),
+      detail: 'Created, offered, accepted, pickup, relay, or problem states',
+      source,
+    },
+    {
+      label: 'Relay overdue packages',
+      value: formatCount(snapshot?.relayOperations?.delayedParcels ?? 4),
+      detail: `${formatCount(snapshot?.relayOperations?.problemParcels ?? 1)} relay problems`,
+      source,
+    },
+    {
+      label: 'Returns awaiting inspection',
+      value: formatCount((snapshot?.returnBottlenecks?.returnsWaitingRelayAction ?? 2) + (snapshot?.returnBottlenecks?.returnsWaitingSequoCollection ?? 1)),
+      detail: `${formatCount(snapshot?.returnBottlenecks?.returnsInProblem ?? 0)} return problems`,
+      source,
+    },
+    {
+      label: 'Payment / settlement issues',
+      value: formatCount(snapshot?.payoutQueue?.merchantPayoutCandidates ?? 5),
+      detail: 'Merchant payouts needing finance attention',
+      source,
+    },
+    {
+      label: 'Courier availability issues',
+      value: formatCount((snapshot?.deliveryCapacity?.pausedCouriers ?? 2) + (snapshot?.deliveryCapacity?.problemMissions?.length ?? 1)),
+      detail: 'Paused couriers plus problem missions',
+      source,
+    },
+  ]
+})
+
 function selectSection(section: SectionId) {
   activeSection.value = section
+  if (section === 'dashboard' && isAuthenticated.value) {
+    void loadDashboard()
+  }
 }
 
 onMounted(() => {
@@ -202,11 +296,31 @@ async function verifySession() {
     }
     currentUser.value = user
     persistTokens()
+    await loadDashboard()
   } catch {
     currentUser.value = null
     authError.value = 'We could not verify this admin session.'
   } finally {
     authLoading.value = false
+  }
+}
+
+async function loadDashboard() {
+  dashboardLoading.value = true
+  dashboardError.value = ''
+  try {
+    const [overview, snapshot] = await Promise.all([
+      apiRequest<AdminOverview>('/api/admin/web/overview'),
+      apiRequest<AdminOperationsSnapshot>('/api/admin/monitoring/operations'),
+    ])
+    dashboardOverview.value = overview
+    dashboardSnapshot.value = snapshot
+  } catch {
+    dashboardOverview.value = null
+    dashboardSnapshot.value = null
+    dashboardError.value = 'Live dashboard data is unavailable. Showing local demo values.'
+  } finally {
+    dashboardLoading.value = false
   }
 }
 
@@ -275,6 +389,11 @@ function useMockLogin() {
     roles: ['SUPER_ADMIN'],
   }
   authError.value = ''
+  void loadDashboard()
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
 }
 
 function persistTokens() {
@@ -381,7 +500,30 @@ function getOrCreateDeviceId(): string {
         </section>
 
         <section class="content-grid">
-          <article class="panel">
+          <article v-if="active.id === 'dashboard'" class="panel dashboard-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Live operations</p>
+                <h2>Dashboard</h2>
+              </div>
+              <button class="secondary" type="button" :disabled="dashboardLoading" @click="loadDashboard">
+                {{ dashboardLoading ? 'Refreshing...' : 'Refresh' }}
+              </button>
+            </div>
+            <p v-if="dashboardError" class="error-text">{{ dashboardError }}</p>
+            <div class="dashboard-grid" aria-label="Admin dashboard cards">
+              <article v-for="card in dashboardCards" :key="card.label" class="dashboard-card">
+                <div class="dashboard-card-top">
+                  <span>{{ card.label }}</span>
+                  <small :class="{ demo: card.source === 'Local demo' }">{{ card.source }}</small>
+                </div>
+                <strong>{{ card.value }}</strong>
+                <p>{{ card.detail }}</p>
+              </article>
+            </div>
+          </article>
+
+          <article v-else class="panel">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">{{ active.readiness }}</p>
