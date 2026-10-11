@@ -303,6 +303,35 @@ button:disabled {
   line-height: 1;
 }
 
+.settings-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(140px, 0.7fr) minmax(150px, 0.6fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 12px;
+}
+
+.setting-row strong,
+.setting-row small {
+  display: block;
+}
+
+.setting-row small {
+  color: var(--muted);
+}
+
+.setting-row span {
+  font-weight: 800;
+}
+
 .panel-heading {
   display: flex;
   justify-content: space-between;
@@ -367,6 +396,7 @@ ul {
   }
 
   .table-row,
+  .setting-row,
   .panel-heading,
   .topbar {
     grid-template-columns: 1fr;

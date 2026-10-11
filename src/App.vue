@@ -85,6 +85,13 @@ type DashboardCard = {
   source: 'API' | 'Local demo'
 }
 
+type BusinessParameter = {
+  label: string
+  value: string
+  source: string
+  writeState: 'read-only' | 'backend endpoint needed'
+}
+
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
@@ -264,6 +271,20 @@ const dashboardCards = computed<DashboardCard[]>(() => {
     },
   ]
 })
+
+const businessParameters: BusinessParameter[] = [
+  { label: 'Minimum delivery price', value: '400 CFA', source: '/api/admin/web/delivery-pricing', writeState: 'read-only' },
+  { label: 'Price per extra kilometer', value: '100 CFA', source: '/api/admin/web/delivery-pricing', writeState: 'read-only' },
+  { label: 'Default commission', value: '15%', source: '/api/admin/web/commissions', writeState: 'read-only' },
+  { label: 'Merchant commission overrides', value: 'Existing per merchant', source: '/api/commissions/merchant-overrides/{merchantId}', writeState: 'read-only' },
+  { label: 'Subscriber discount rates', value: 'Prepared in subscription domain', source: 'subscription domain', writeState: 'backend endpoint needed' },
+  { label: 'Referral delivery credits', value: 'Delivery credit only', source: 'referral domain', writeState: 'backend endpoint needed' },
+  { label: 'Bargaining attempt count', value: '3 attempts default', source: 'bargaining domain', writeState: 'backend endpoint needed' },
+  { label: 'Negotiated price lock duration', value: '24 hours', source: 'bargaining domain', writeState: 'backend endpoint needed' },
+  { label: 'Return request delay', value: '72 hours after delivery', source: 'returns domain', writeState: 'backend endpoint needed' },
+  { label: 'Relay storage delay and fee', value: 'After two weeks', source: 'relay domain', writeState: 'backend endpoint needed' },
+  { label: 'Categories excluded from relay/returns', value: 'Policy-backed category rules', source: 'relay / returns policy', writeState: 'backend endpoint needed' },
+]
 
 function selectSection(section: SectionId) {
   activeSection.value = section
@@ -519,6 +540,30 @@ function getOrCreateDeviceId(): string {
                 </div>
                 <strong>{{ card.value }}</strong>
                 <p>{{ card.detail }}</p>
+              </article>
+            </div>
+          </article>
+
+          <article v-else-if="active.id === 'settings'" class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Annex A.6</p>
+                <h2>Business parameters</h2>
+              </div>
+              <code>/api/admin/web/business-parameters</code>
+            </div>
+            <p>
+              These are contract MVP parameters. Values are displayed from implemented read endpoints or documented domain policy.
+              Write controls stay disabled until dedicated backend mutation endpoints exist.
+            </p>
+            <div class="settings-grid" aria-label="Business parameters">
+              <article v-for="parameter in businessParameters" :key="parameter.label" class="setting-row">
+                <div>
+                  <strong>{{ parameter.label }}</strong>
+                  <small>{{ parameter.source }}</small>
+                </div>
+                <span>{{ parameter.value }}</span>
+                <button type="button" disabled>{{ parameter.writeState }}</button>
               </article>
             </div>
           </article>

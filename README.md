@@ -69,6 +69,10 @@ VITE_SEQUO_API_BASE_URL=https://api.sequoservices.com
 
 The backend currently exposes implemented routes under `/api`, not `/api/v1`.
 
+## Disabled MVP Settings
+
+The settings screen shows Annex A.6 business parameters. Read endpoints exist for admin overview, delivery pricing and commission summaries. Dedicated write endpoints are still needed for subscription discounts, referral credit policy, bargaining attempt/lock policy, return window policy, relay storage fee policy, and relay/return excluded category policy.
+
 ## Build Principle
 
 This is not a landing page. Build it like serious internal software: searchable tables, useful dashboards, precise status labels, safe mutations, and strong permission boundaries.
