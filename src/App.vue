@@ -114,6 +114,23 @@ type AdminMerchantRow = {
   updatedAt?: string
 }
 
+type AdminOrderRow = {
+  id: string
+  customerId: string
+  serviceLevel: string
+  route: string
+  fulfillmentPriority: string
+  customerFacingStatus: string
+  itemSubtotalCfa: number
+  deliveryFeeCfa: number
+  totalCfa: number
+  paymentProvider: string
+  paymentStatus: string
+  orderStatus: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
@@ -136,6 +153,11 @@ const merchantsError = ref('')
 const merchantSearch = ref('')
 const selectedMerchantId = ref('')
 const adminMerchants = ref<AdminMerchantRow[]>([])
+const ordersLoading = ref(false)
+const ordersError = ref('')
+const orderSearch = ref('')
+const selectedOrderId = ref('')
+const adminOrders = ref<AdminOrderRow[]>([])
 const deviceId = getOrCreateDeviceId()
 const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
 const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
@@ -354,6 +376,21 @@ const displayedMerchants = computed(() => {
   })
 })
 const selectedMerchant = computed(() => displayedMerchants.value.find((merchant) => merchant.id === selectedMerchantId.value) ?? displayedMerchants.value[0] ?? null)
+const localDemoOrders: AdminOrderRow[] = [
+  { id: 'order-local-1', customerId: 'customer-a', serviceLevel: 'EXPRESS', route: 'HOME_DELIVERY', fulfillmentPriority: 'FASTEST_AVAILABLE', customerFacingStatus: 'In transit', itemSubtotalCfa: 18400, deliveryFeeCfa: 600, totalCfa: 19000, paymentProvider: 'YAS_TOGO', paymentStatus: 'VALIDATED', orderStatus: 'ACCEPTED_FOR_FULFILLMENT' },
+  { id: 'order-local-2', customerId: 'customer-b', serviceLevel: 'CLASSIC', route: 'RELAY_POINT', fulfillmentPriority: 'LOWEST_COST', customerFacingStatus: 'Waiting for relay pickup', itemSubtotalCfa: 9800, deliveryFeeCfa: 400, totalCfa: 10200, paymentProvider: 'MOOV_AFRICA', paymentStatus: 'PENDING', orderStatus: 'ACCEPTED_FOR_FULFILLMENT' },
+  { id: 'order-local-3', customerId: 'customer-c', serviceLevel: 'CLASSIC', route: 'HOME_DELIVERY', fulfillmentPriority: 'STANDARD', customerFacingStatus: 'Delivered', itemSubtotalCfa: 26500, deliveryFeeCfa: 700, totalCfa: 27200, paymentProvider: 'YAS_TOGO', paymentStatus: 'VALIDATED', orderStatus: 'DELIVERED' },
+]
+const displayedOrders = computed(() => {
+  const source = adminOrders.value.length > 0 ? adminOrders.value : localDemoOrders
+  const query = orderSearch.value.trim().toLowerCase()
+  return source.filter((order) => {
+    if (!query) return true
+    return [order.id, order.customerId, order.serviceLevel, order.route, order.paymentStatus, order.orderStatus, order.customerFacingStatus]
+      .some((value) => String(value).toLowerCase().includes(query))
+  })
+})
+const selectedOrder = computed(() => displayedOrders.value.find((order) => order.id === selectedOrderId.value) ?? displayedOrders.value[0] ?? null)
 
 function selectSection(section: SectionId) {
   activeSection.value = section
@@ -365,6 +402,9 @@ function selectSection(section: SectionId) {
   }
   if (section === 'merchants' && isAuthenticated.value) {
     void loadMerchants()
+  }
+  if (section === 'orders' && isAuthenticated.value) {
+    void loadOrders()
   }
 }
 
@@ -395,11 +435,27 @@ async function verifySession() {
     await loadDashboard()
     await loadUsers()
     await loadMerchants()
+    await loadOrders()
   } catch {
     currentUser.value = null
     authError.value = 'We could not verify this admin session.'
   } finally {
     authLoading.value = false
+  }
+}
+
+async function loadOrders() {
+  ordersLoading.value = true
+  ordersError.value = ''
+  try {
+    adminOrders.value = await apiRequest<AdminOrderRow[]>('/api/admin/web/orders')
+    selectedOrderId.value = adminOrders.value[0]?.id ?? ''
+  } catch {
+    adminOrders.value = []
+    selectedOrderId.value = localDemoOrders[0]?.id ?? ''
+    ordersError.value = 'Live orders are unavailable. Showing local demo tracking.'
+  } finally {
+    ordersLoading.value = false
   }
 }
 
@@ -518,6 +574,7 @@ function useMockLogin() {
   void loadDashboard()
   void loadUsers()
   void loadMerchants()
+  void loadOrders()
 }
 
 function formatCount(value: number): string {
@@ -734,6 +791,62 @@ function getOrCreateDeviceId(): string {
                   <div><dt>Product count</dt><dd>Backend aggregate endpoint needed</dd></div>
                 </dl>
                 <button type="button" disabled>Activate/deactivate products: backend endpoint needed</button>
+              </aside>
+            </div>
+          </article>
+
+          <article v-else-if="active.id === 'orders'" class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Internal logistics</p>
+                <h2>Orders and delivery tracking</h2>
+              </div>
+              <button class="secondary" type="button" :disabled="ordersLoading" @click="loadOrders">
+                {{ ordersLoading ? 'Refreshing...' : 'Refresh' }}
+              </button>
+            </div>
+            <p v-if="ordersError" class="error-text">{{ ordersError }}</p>
+            <input v-model="orderSearch" type="search" placeholder="Search order, customer, route, payment, status" />
+            <div class="split-panel">
+              <div class="table" role="table" aria-label="Order list">
+                <div class="table-row order-row table-head" role="row">
+                  <span role="columnheader">Order</span>
+                  <span role="columnheader">Payment</span>
+                  <span role="columnheader">Total</span>
+                  <span role="columnheader">Status</span>
+                </div>
+                <button
+                  v-for="order in displayedOrders"
+                  :key="order.id"
+                  class="table-row order-row selectable-row"
+                  type="button"
+                  @click="selectedOrderId = order.id"
+                >
+                  <span>
+                    <strong>{{ order.id }}</strong>
+                    <small>{{ order.customerId }} · {{ order.route }}</small>
+                  </span>
+                  <span>{{ order.paymentStatus }}</span>
+                  <span>{{ order.totalCfa.toLocaleString('en-US') }} CFA</span>
+                  <span>{{ order.orderStatus }}</span>
+                </button>
+              </div>
+              <aside v-if="selectedOrder" class="detail-card">
+                <p class="eyebrow">Order detail</p>
+                <h3>{{ selectedOrder.customerFacingStatus }}</h3>
+                <dl>
+                  <div><dt>Service</dt><dd>{{ selectedOrder.serviceLevel }} · {{ selectedOrder.fulfillmentPriority }}</dd></div>
+                  <div><dt>Items</dt><dd>{{ selectedOrder.itemSubtotalCfa.toLocaleString('en-US') }} CFA</dd></div>
+                  <div><dt>Delivery</dt><dd>{{ selectedOrder.deliveryFeeCfa.toLocaleString('en-US') }} CFA</dd></div>
+                  <div><dt>Provider</dt><dd>{{ selectedOrder.paymentProvider }}</dd></div>
+                </dl>
+                <ol class="timeline">
+                  <li>Order accepted for fulfillment</li>
+                  <li>Merchant sub-orders tracked from `/api/merchant/sub-orders`</li>
+                  <li>Delivery missions tracked from `/api/delivery/missions`</li>
+                  <li>Relay fallback tracked from `/api/relay/parcels` when applicable</li>
+                </ol>
+                <button type="button" disabled>Operational mutations require route-specific admin endpoints</button>
               </aside>
             </div>
           </article>

@@ -379,6 +379,10 @@ code {
   grid-template-columns: minmax(0, 1.3fr) 0.7fr 0.8fr;
 }
 
+.table-row.order-row {
+  grid-template-columns: minmax(0, 1.3fr) 0.7fr 0.7fr 0.9fr;
+}
+
 .selectable-row {
   width: 100%;
   border: 0;
@@ -446,6 +450,14 @@ dt {
 dd {
   margin: 0;
   font-weight: 700;
+}
+
+.timeline {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
 }
 
 .table-row:first-child {
