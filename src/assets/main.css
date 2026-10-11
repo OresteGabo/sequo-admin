@@ -383,6 +383,10 @@ code {
   grid-template-columns: minmax(0, 1.3fr) 0.7fr 0.7fr 0.9fr;
 }
 
+.table-row.return-row {
+  grid-template-columns: minmax(0, 1fr) 0.8fr minmax(0, 1fr) minmax(0, 1.2fr);
+}
+
 .selectable-row {
   width: 100%;
   border: 0;

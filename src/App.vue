@@ -9,6 +9,7 @@ type SectionId =
   | 'deliveries'
   | 'payments'
   | 'commissions'
+  | 'returns'
   | 'relay'
   | 'settings'
 
@@ -131,6 +132,16 @@ type AdminOrderRow = {
   updatedAt?: string
 }
 
+type ReturnRow = {
+  id: string
+  orderId: string
+  stage: string
+  refundStatus: string
+  requestedRefundCfa: number
+  action: string
+  endpoint: string
+}
+
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
@@ -158,6 +169,7 @@ const ordersError = ref('')
 const orderSearch = ref('')
 const selectedOrderId = ref('')
 const adminOrders = ref<AdminOrderRow[]>([])
+const returnSearch = ref('')
 const deviceId = getOrCreateDeviceId()
 const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
 const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
@@ -213,6 +225,13 @@ const sections: Section[] = [
     description: 'Default commission and merchant overrides; mutation remains in API-specific routes.',
   },
   {
+    id: 'returns',
+    label: 'Returns',
+    endpoint: '/api/returns',
+    readiness: 'Read-only',
+    description: 'Return requests, relay drop-off, physical receipt, inspection, and refund instruction state.',
+  },
+  {
     id: 'relay',
     label: 'Relay points',
     endpoint: '/api/admin/web/relay',
@@ -265,6 +284,11 @@ const mockRows: Record<SectionId, string[][]> = {
   commissions: [
     ['Merchant override read', '/api/commissions/merchant-overrides/{merchantId}', 'Existing route'],
     ['Admin facade', '/api/admin/web/commissions', 'Read model'],
+  ],
+  returns: [
+    ['Return request list', '/api/returns', 'Available by customer/support/admin scope'],
+    ['Physical receipt', '/api/returns/{returnId}/physical-receipt', 'Support/admin route exists'],
+    ['Refund instruction', '/api/returns/{returnId}/refund', 'Admin route exists after receipt/check'],
   ],
   relay: [
     ['Relay parcels', '/api/relay/parcels', 'Existing operational route'],
@@ -391,6 +415,17 @@ const displayedOrders = computed(() => {
   })
 })
 const selectedOrder = computed(() => displayedOrders.value.find((order) => order.id === selectedOrderId.value) ?? displayedOrders.value[0] ?? null)
+const returnRows: ReturnRow[] = [
+  { id: 'RET-2041', orderId: 'ORD-80354', stage: 'Dropped at relay', refundStatus: 'Not eligible until SEQUO receipt', requestedRefundCfa: 12500, action: 'Receive physical item', endpoint: '/api/returns/{returnId}/physical-receipt' },
+  { id: 'RET-2038', orderId: 'ORD-80291', stage: 'Under inspection', refundStatus: 'Pending condition check', requestedRefundCfa: 38000, action: 'Review condition', endpoint: 'backend endpoint needed for approve/reject detail' },
+  { id: 'RET-2031', orderId: 'ORD-80188', stage: 'Receipt verified', refundStatus: 'Refund instruction ready', requestedRefundCfa: 7900, action: 'Trigger refund instruction', endpoint: '/api/returns/{returnId}/refund' },
+  { id: 'RET-2029', orderId: 'ORD-80120', stage: 'Problem', refundStatus: 'Blocked', requestedRefundCfa: 15400, action: 'Investigate', endpoint: 'backend endpoint needed for dispute workflow' },
+]
+const displayedReturns = computed(() => {
+  const query = returnSearch.value.trim().toLowerCase()
+  if (!query) return returnRows
+  return returnRows.filter((item) => [item.id, item.orderId, item.stage, item.refundStatus, item.action, item.endpoint].some((value) => value.toLowerCase().includes(query)))
+})
 
 function selectSection(section: SectionId) {
   activeSection.value = section
@@ -848,6 +883,40 @@ function getOrCreateDeviceId(): string {
                 </ol>
                 <button type="button" disabled>Operational mutations require route-specific admin endpoints</button>
               </aside>
+            </div>
+          </article>
+
+          <article v-else-if="active.id === 'returns'" class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Reverse logistics</p>
+                <h2>Returns and refunds</h2>
+              </div>
+              <code>/api/returns</code>
+            </div>
+            <p>
+              Refund actions stay behind physical receipt and condition check. Cash refunds are not supported in this admin flow.
+            </p>
+            <input v-model="returnSearch" type="search" placeholder="Search return, order, stage, refund status" />
+            <div class="table" role="table" aria-label="Returns and refunds">
+              <div class="table-row return-row table-head" role="row">
+                <span role="columnheader">Return</span>
+                <span role="columnheader">Stage</span>
+                <span role="columnheader">Refund</span>
+                <span role="columnheader">Action</span>
+              </div>
+              <div v-for="item in displayedReturns" :key="item.id" class="table-row return-row" role="row">
+                <span role="cell">
+                  <strong>{{ item.id }}</strong>
+                  <small>{{ item.orderId }} · {{ item.requestedRefundCfa.toLocaleString('en-US') }} CFA</small>
+                </span>
+                <span role="cell">{{ item.stage }}</span>
+                <span role="cell">{{ item.refundStatus }}</span>
+                <span role="cell">
+                  <strong>{{ item.action }}</strong>
+                  <small>{{ item.endpoint }}</small>
+                </span>
+              </div>
             </div>
           </article>
 
