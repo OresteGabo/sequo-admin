@@ -708,6 +708,7 @@ async function verifyEmailCode() {
         email: email.value.trim(),
         code: emailCode.value.trim(),
         deviceId,
+        ...adminDeviceMetadata(),
       }),
     })
     if (!response.ok) throw new Error('request_failed')
@@ -771,6 +772,7 @@ async function completeSocialLogin(provider: SocialProvider, providerToken?: str
         device: {
           deviceId,
           appSource: 'SEQUO_ADMIN',
+          ...adminDeviceMetadata(),
         },
       }),
     })
@@ -918,7 +920,7 @@ async function exchangeApprovedPhoneLogin() {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ code: loginCode.value, deviceId }),
+      body: JSON.stringify({ code: loginCode.value, deviceId, ...adminDeviceMetadata() }),
     })
     if (!response.ok) throw new Error('request_failed')
     const body = (await response.json()) as AdminLoginExchangeResponse
@@ -1008,6 +1010,8 @@ async function apiRequest<T>(path: string, retryAfterRefresh = true): Promise<T>
   if (response.status === 401 && retryAfterRefresh && refreshToken.value) {
     const refreshed = await refreshSession()
     if (refreshed) return apiRequest<T>(path, false)
+    clearSession()
+    authError.value = 'Your session ended. Please sign in again.'
   }
   if (!response.ok) throw new Error('request_failed')
   return response.json() as Promise<T>
@@ -1037,6 +1041,7 @@ async function refreshSession(): Promise<boolean> {
 async function signOut() {
   const tokenToRevoke = refreshToken.value
   clearSession()
+  authNotice.value = 'You have signed out.'
   if (tokenToRevoke) {
     await fetch(`${apiBaseUrl}/api/auth/logout`, {
       method: 'POST',
@@ -1162,6 +1167,13 @@ function getOrCreateDeviceId(): string {
 function browserDeviceLabel(): string {
   const platform = navigator.platform || 'computer'
   return `Admin web on ${platform}`.slice(0, 80)
+}
+
+function adminDeviceMetadata() {
+  return {
+    deviceLabel: browserDeviceLabel(),
+    browserInfo: navigator.userAgent.slice(0, 180),
+  }
 }
 </script>
 
