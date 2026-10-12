@@ -49,6 +49,32 @@ type AuthTokens = {
   expiresIn: number
 }
 
+type SocialProvider = 'GOOGLE' | 'APPLE'
+
+type GoogleCredentialResponse = {
+  credential?: string
+}
+
+type GoogleIdentityServices = {
+  accounts: {
+    id: {
+      initialize: (config: {
+        client_id: string
+        callback: (response: GoogleCredentialResponse) => void
+        auto_select?: boolean
+        cancel_on_tap_outside?: boolean
+      }) => void
+      prompt: () => void
+    }
+  }
+}
+
+declare global {
+  interface Window {
+    google?: GoogleIdentityServices
+  }
+}
+
 type AdminLoginRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CONSUMED'
 
 type AdminLoginStartResponse = {
@@ -169,6 +195,7 @@ type ReturnRow = {
 }
 
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
+const googleWebClientId = (import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID ?? '').trim()
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
 const accessToken = ref('')
@@ -194,6 +221,7 @@ const emailCodeRequestedAtMs = ref(0)
 const emailCodeExpiresInSeconds = ref(0)
 const emailCodeRetryAfterSeconds = ref(0)
 const emailCodeTimer = ref<ReturnType<typeof window.setInterval> | null>(null)
+const socialLoginLoading = ref<SocialProvider | ''>('')
 const dashboardLoading = ref(false)
 const dashboardError = ref('')
 const dashboardOverview = ref<AdminOverview | null>(null)
@@ -215,6 +243,7 @@ const selectedOrderId = ref('')
 const adminOrders = ref<AdminOrderRow[]>([])
 const returnSearch = ref('')
 const deviceId = getOrCreateDeviceId()
+let googleScriptPromise: Promise<void> | null = null
 const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
 const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
 const hasPendingPhoneLogin = computed(() => Boolean(loginRequestId.value && loginCode.value && loginStatus.value === 'PENDING'))
@@ -237,6 +266,7 @@ const canVerifyEmailCode = computed(() =>
   && !authLoading.value
   && !emailCodeLoading.value,
 )
+const googleLoginReady = computed(() => Boolean(googleWebClientId))
 const loginStatusLabel = computed(() => {
   if (!loginStatus.value) return 'Ready'
   return humanize(loginStatus.value)
@@ -551,7 +581,7 @@ async function verifySession() {
   try {
     const user = await apiRequest<CurrentUser>('/api/auth/me')
     if (!user.active || !user.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')) {
-      currentUser.value = null
+      clearSession()
       authError.value = 'This account is not allowed to use SEQUO Admin.'
       return
     }
@@ -562,7 +592,7 @@ async function verifySession() {
     await loadMerchants()
     await loadOrders()
   } catch {
-    currentUser.value = null
+    clearSession()
     authError.value = 'We could not verify this admin session.'
   } finally {
     authLoading.value = false
@@ -693,6 +723,84 @@ async function verifyEmailCode() {
   } finally {
     emailCodeLoading.value = false
   }
+}
+
+async function startGoogleLogin() {
+  if (!googleLoginReady.value || socialLoginLoading.value) return
+  socialLoginLoading.value = 'GOOGLE'
+  authError.value = ''
+  authNotice.value = 'Use social login only on a trusted computer.'
+  try {
+    await loadGoogleIdentityServices()
+    const googleId = window.google?.accounts.id
+    if (!googleId) throw new Error('google_unavailable')
+    googleId.initialize({
+      client_id: googleWebClientId,
+      callback: (response) => {
+        void completeSocialLogin('GOOGLE', response.credential)
+      },
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    })
+    googleId.prompt()
+    authNotice.value = 'Choose the Google account allowed for SEQUO Admin.'
+  } catch {
+    authError.value = 'Google login is not available right now. Use phone approval instead.'
+  } finally {
+    socialLoginLoading.value = ''
+  }
+}
+
+async function completeSocialLogin(provider: SocialProvider, providerToken?: string) {
+  if (!providerToken) {
+    authError.value = 'Social login could not be completed. Use phone approval instead.'
+    return
+  }
+  socialLoginLoading.value = provider
+  authError.value = ''
+  authNotice.value = ''
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/auth/social/${provider}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        token: providerToken,
+        device: {
+          deviceId,
+          appSource: 'SEQUO_ADMIN',
+        },
+      }),
+    })
+    if (!response.ok) throw new Error('social_login_failed')
+    const tokens = (await response.json()) as AuthTokens
+    accessToken.value = tokens.accessToken
+    refreshToken.value = tokens.refreshToken
+    persistTokens()
+    await verifySession()
+  } catch {
+    clearSession()
+    authError.value = 'Social login could not open SEQUO Admin. Use phone approval instead.'
+  } finally {
+    socialLoginLoading.value = ''
+  }
+}
+
+function loadGoogleIdentityServices(): Promise<void> {
+  if (window.google?.accounts.id) return Promise.resolve()
+  if (googleScriptPromise) return googleScriptPromise
+  googleScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('google_script_failed'))
+    document.head.appendChild(script)
+  })
+  return googleScriptPromise
 }
 
 function sanitizeEmailCodeInput() {
@@ -1193,6 +1301,26 @@ function browserDeviceLabel(): string {
                   Back to phone approval
                 </button>
               </div>
+            </div>
+            <div class="social-login-card">
+              <p>Use only on a trusted computer.</p>
+              <div class="social-login-actions">
+                <button
+                  class="secondary"
+                  type="button"
+                  :disabled="!googleLoginReady || Boolean(socialLoginLoading)"
+                  @click="startGoogleLogin"
+                >
+                  <span class="material-symbols-rounded" aria-hidden="true">account_circle</span>
+                  {{ socialLoginLoading === 'GOOGLE' ? 'Opening Google...' : 'Continue with Google' }}
+                </button>
+                <button class="secondary" type="button" disabled>
+                  <span class="material-symbols-rounded" aria-hidden="true">lock</span>
+                  Continue with Apple
+                </button>
+              </div>
+              <small v-if="!googleLoginReady">Google login is not configured for this workspace yet.</small>
+              <small>Apple login will be available after staff verification is ready.</small>
             </div>
             <p class="login-help">
               Approve from an already signed-in SEQUO mobile app. Use demo mode only for training.
