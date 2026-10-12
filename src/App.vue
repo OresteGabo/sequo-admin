@@ -69,6 +69,12 @@ type AdminLoginExchangeResponse = AuthTokens & {
   user: CurrentUser
 }
 
+type AdminEmailCodeRequestResponse = {
+  status: string
+  expiresInSeconds: number
+  retryAfterSeconds: number
+}
+
 type AdminOverview = {
   totals?: {
     orders?: number
@@ -180,6 +186,14 @@ const loginPollTimer = ref<ReturnType<typeof window.setInterval> | null>(null)
 const loginCountdownTimer = ref<ReturnType<typeof window.setInterval> | null>(null)
 const currentTimeMs = ref(Date.now())
 const exchangeInProgress = ref(false)
+const emailFallbackOpen = ref(false)
+const emailCode = ref('')
+const emailCodeRequested = ref(false)
+const emailCodeLoading = ref(false)
+const emailCodeRequestedAtMs = ref(0)
+const emailCodeExpiresInSeconds = ref(0)
+const emailCodeRetryAfterSeconds = ref(0)
+const emailCodeTimer = ref<ReturnType<typeof window.setInterval> | null>(null)
 const dashboardLoading = ref(false)
 const dashboardError = ref('')
 const dashboardOverview = ref<AdminOverview | null>(null)
@@ -205,6 +219,24 @@ const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.
 const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
 const hasPendingPhoneLogin = computed(() => Boolean(loginRequestId.value && loginCode.value && loginStatus.value === 'PENDING'))
 const canRequestPhoneLogin = computed(() => Boolean(email.value.trim()) && !authLoading.value && !exchangeInProgress.value)
+const emailCodeExpiresAtMs = computed(() => emailCodeRequestedAtMs.value + emailCodeExpiresInSeconds.value * 1000)
+const emailCodeRetryAtMs = computed(() => emailCodeRequestedAtMs.value + emailCodeRetryAfterSeconds.value * 1000)
+const emailCodeCountdownLabel = computed(() => formatRemainingTime(emailCodeExpiresAtMs.value - currentTimeMs.value))
+const emailCodeRetryLabel = computed(() => formatRemainingTime(emailCodeRetryAtMs.value - currentTimeMs.value))
+const canRequestEmailCode = computed(() =>
+  Boolean(email.value.trim())
+  && emailFallbackOpen.value
+  && !authLoading.value
+  && !emailCodeLoading.value
+  && (!emailCodeRequested.value || currentTimeMs.value >= emailCodeRetryAtMs.value),
+)
+const canVerifyEmailCode = computed(() =>
+  Boolean(email.value.trim())
+  && Boolean(emailCode.value.trim())
+  && emailCodeRequested.value
+  && !authLoading.value
+  && !emailCodeLoading.value,
+)
 const loginStatusLabel = computed(() => {
   if (!loginStatus.value) return 'Ready'
   return humanize(loginStatus.value)
@@ -506,6 +538,7 @@ onMounted(() => {
 onUnmounted(() => {
   stopLoginPolling()
   stopCountdown()
+  stopEmailCodeTimer()
 })
 
 async function verifySession() {
@@ -540,6 +573,7 @@ async function requestPhoneLogin() {
   if (!canRequestPhoneLogin.value) return
   stopLoginPolling()
   stopCountdown()
+  resetEmailFallback()
   authLoading.value = true
   authError.value = ''
   authNotice.value = ''
@@ -574,6 +608,117 @@ async function requestPhoneLogin() {
     authError.value = 'We could not create a phone login request. Try again in a moment.'
   } finally {
     authLoading.value = false
+  }
+}
+
+function openEmailFallback() {
+  resetPhoneLogin()
+  emailFallbackOpen.value = true
+  authError.value = ''
+  authNotice.value = 'Use this only when you cannot approve from your SEQUO app.'
+}
+
+function resetEmailFallback() {
+  stopEmailCodeTimer()
+  emailFallbackOpen.value = false
+  emailCode.value = ''
+  emailCodeRequested.value = false
+  emailCodeLoading.value = false
+  emailCodeRequestedAtMs.value = 0
+  emailCodeExpiresInSeconds.value = 0
+  emailCodeRetryAfterSeconds.value = 0
+}
+
+async function requestEmailCode() {
+  if (!canRequestEmailCode.value) return
+  stopLoginPolling()
+  stopCountdown()
+  emailCodeLoading.value = true
+  authError.value = ''
+  authNotice.value = ''
+  emailCode.value = ''
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/admin-auth/email-codes`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: email.value.trim() }),
+    })
+    if (!response.ok) throw new Error('request_failed')
+    const body = (await response.json()) as AdminEmailCodeRequestResponse
+    emailCodeRequested.value = true
+    emailCodeRequestedAtMs.value = Date.now()
+    emailCodeExpiresInSeconds.value = Math.max(60, body.expiresInSeconds || 300)
+    emailCodeRetryAfterSeconds.value = Math.max(30, body.retryAfterSeconds || 60)
+    currentTimeMs.value = Date.now()
+    authNotice.value = 'If this account can use SEQUO Admin, a login code will arrive by email.'
+    startEmailCodeTimer()
+  } catch {
+    authError.value = 'We could not send an email code. Try again in a moment.'
+  } finally {
+    emailCodeLoading.value = false
+  }
+}
+
+async function verifyEmailCode() {
+  if (!canVerifyEmailCode.value) return
+  emailCodeLoading.value = true
+  authError.value = ''
+  authNotice.value = ''
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/admin-auth/email-codes/verify`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: email.value.trim(),
+        code: emailCode.value.trim(),
+        deviceId,
+      }),
+    })
+    if (!response.ok) throw new Error('request_failed')
+    const body = (await response.json()) as AdminLoginExchangeResponse
+    accessToken.value = body.accessToken
+    refreshToken.value = body.refreshToken
+    currentUser.value = body.user
+    persistTokens()
+    resetEmailFallback()
+    await verifySession()
+  } catch {
+    authError.value = 'We could not verify this email code. Check the code or request a new one.'
+  } finally {
+    emailCodeLoading.value = false
+  }
+}
+
+function sanitizeEmailCodeInput() {
+  emailCode.value = emailCode.value
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .slice(0, 16)
+}
+
+function startEmailCodeTimer() {
+  stopEmailCodeTimer()
+  currentTimeMs.value = Date.now()
+  emailCodeTimer.value = window.setInterval(() => {
+    currentTimeMs.value = Date.now()
+    if (emailCodeRequested.value && emailCodeExpiresAtMs.value <= currentTimeMs.value) {
+      authNotice.value = ''
+      authError.value = 'This email code expired. Request a new one.'
+      stopEmailCodeTimer()
+    }
+  }, 1000)
+}
+
+function stopEmailCodeTimer() {
+  if (emailCodeTimer.value) {
+    window.clearInterval(emailCodeTimer.value)
+    emailCodeTimer.value = null
   }
 }
 
@@ -876,6 +1021,7 @@ function persistTokens() {
 function clearSession() {
   stopLoginPolling()
   stopCountdown()
+  resetEmailFallback()
   accessToken.value = ''
   refreshToken.value = ''
   currentUser.value = null
@@ -887,6 +1033,14 @@ function clearSession() {
   loginExpiresAt.value = ''
   sessionStorage.removeItem('sequo_admin_access_token')
   sessionStorage.removeItem('sequo_admin_refresh_token')
+}
+
+function formatRemainingTime(remainingMs: number): string {
+  if (remainingMs <= 0) return ''
+  const totalSeconds = Math.ceil(remainingMs / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = String(totalSeconds % 60).padStart(2, '0')
+  return `${minutes}:${seconds}`
 }
 
 function getOrCreateDeviceId(): string {
@@ -986,6 +1140,10 @@ function browserDeviceLabel(): string {
                 <span class="material-symbols-rounded" aria-hidden="true">password</span>
                 {{ authLoading ? 'Requesting...' : hasPendingPhoneLogin ? 'Request new code' : 'Request phone code' }}
               </button>
+              <button v-if="!emailFallbackOpen" class="secondary" type="button" @click="openEmailFallback">
+                <span class="material-symbols-rounded" aria-hidden="true">mail_lock</span>
+                I cannot access my phone
+              </button>
               <button class="secondary" type="button" @click="useMockLogin">
                 <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
                 Open demo workspace
@@ -994,6 +1152,47 @@ function browserDeviceLabel(): string {
                 <span class="material-symbols-rounded" aria-hidden="true">alternate_email</span>
                 Use another email
               </button>
+            </div>
+            <div v-if="emailFallbackOpen" class="email-fallback-card">
+              <div>
+                <strong>Email login code</strong>
+                <p>Use this only when you cannot approve from your SEQUO app.</p>
+              </div>
+              <div class="email-code-row">
+                <button type="button" :disabled="!canRequestEmailCode" @click="requestEmailCode">
+                  <span class="material-symbols-rounded" aria-hidden="true">outgoing_mail</span>
+                  {{ emailCodeLoading && !emailCodeRequested ? 'Sending...' : emailCodeRequested ? 'Send new code' : 'Send email code' }}
+                </button>
+                <span v-if="emailCodeRequested && !canRequestEmailCode && emailCodeRetryLabel">
+                  Resend in {{ emailCodeRetryLabel }}
+                </span>
+              </div>
+              <label v-if="emailCodeRequested">
+                Email code
+                <input
+                  v-model="emailCode"
+                  type="text"
+                  inputmode="text"
+                  autocomplete="one-time-code"
+                  placeholder="ABC-DEF"
+                  maxlength="16"
+                  @input="sanitizeEmailCodeInput"
+                />
+              </label>
+              <div v-if="emailCodeRequested" class="approval-status">
+                <span class="status-pill">Email code sent</span>
+                <span v-if="emailCodeCountdownLabel">Time left {{ emailCodeCountdownLabel }}</span>
+              </div>
+              <div class="login-actions">
+                <button v-if="emailCodeRequested" type="button" :disabled="!canVerifyEmailCode" @click="verifyEmailCode">
+                  <span class="material-symbols-rounded" aria-hidden="true">login</span>
+                  {{ emailCodeLoading ? 'Checking...' : 'Verify and open workspace' }}
+                </button>
+                <button class="secondary" type="button" @click="resetEmailFallback">
+                  <span class="material-symbols-rounded" aria-hidden="true">phonelink_lock</span>
+                  Back to phone approval
+                </button>
+              </div>
             </div>
             <p class="login-help">
               Approve from an already signed-in SEQUO mobile app. Use demo mode only for training.
