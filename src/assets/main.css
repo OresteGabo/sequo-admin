@@ -215,8 +215,9 @@ h2 {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(340px, 0.75fr);
   background:
-    linear-gradient(120deg, rgba(12, 73, 48, 0.94), rgba(15, 111, 73, 0.84)),
-    url('/profile/sample-profile.jpeg') center / cover;
+    radial-gradient(circle at 18% 18%, rgba(94, 227, 157, 0.26), transparent 16rem),
+    radial-gradient(circle at 82% 12%, rgba(255, 255, 255, 0.13), transparent 14rem),
+    linear-gradient(120deg, #0b3d2b 0%, #0d6f49 58%, #16a36a 100%);
 }
 
 .login-hero-copy {
@@ -365,8 +366,9 @@ button:disabled {
   padding: clamp(22px, 4vw, 40px);
   color: white;
   background:
-    linear-gradient(120deg, rgba(13, 84, 55, 0.96), rgba(22, 163, 106, 0.78)),
-    url('/profile/sample-profile.jpeg') center / cover;
+    radial-gradient(circle at 18% 25%, rgba(255, 255, 255, 0.22), transparent 10rem),
+    radial-gradient(circle at 88% 10%, rgba(94, 227, 157, 0.34), transparent 14rem),
+    linear-gradient(120deg, #0d5437 0%, #128558 58%, #16a36a 100%);
   box-shadow: var(--shadow);
   display: flex;
   justify-content: space-between;
