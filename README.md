@@ -2,12 +2,12 @@
 
 Private internal dashboard for Sequo employees at `admin.sequoservices.com`.
 
-This project is for operational management, monitoring, support, finance, and admin workflows. It should be secure, dense, fast, and built for repeated daily use.
+This project is for operational management, monitoring, support, finance, and admin workflows. It should be clear enough for daily operations staff to use without knowing anything about code, servers, or backend routes.
 
 ## What This App Should Do
 
 - Monitor live operational health.
-- Manage orders, merchant sub-orders, delivery missions, hubs, relay parcels, returns, settlements, commissions, and notifications.
+- Manage orders, merchant packages, courier deliveries, hubs, relay parcels, returns, settlements, commissions, and notifications.
 - Support employee roles such as admin, support, operations, and finance.
 - Provide safe actions with confirmations, reason fields, and audit awareness.
 - Hide or disable actions the current user cannot perform.
@@ -26,7 +26,7 @@ Recommended additions:
 - Tailwind CSS
 - A table library
 - A chart library
-- Runtime validation for API payloads
+- Safe validation before important actions
 
 ## Important Docs
 
@@ -59,20 +59,17 @@ Type-check and build:
 npm run build
 ```
 
-## API Usage
+## Staff Experience
 
-Use an environment variable:
+The app should speak in operational terms:
 
-```text
-VITE_SEQUO_API_BASE_URL=https://api.sequoservices.com
-```
+- “Orders waiting for merchant action,” not technical order routes.
+- “Refund instruction ready,” not endpoint names.
+- “Setup needed,” not backend jargon.
+- “View only,” when a screen is useful but actions are not ready yet.
 
-The backend currently exposes implemented routes under `/api`, not `/api/v1`.
-
-## Disabled MVP Settings
-
-The settings screen shows Annex A.6 business parameters. Read endpoints exist for admin overview, delivery pricing and commission summaries. Dedicated write endpoints are still needed for subscription discounts, referral credit policy, bargaining attempt/lock policy, return window policy, relay storage fee policy, and relay/return excluded category policy.
+Technical configuration belongs in developer docs, not in the visible management interface.
 
 ## Build Principle
 
-This is not a landing page. Build it like serious internal software: searchable tables, useful dashboards, precise status labels, safe mutations, and strong permission boundaries.
+This is not a landing page or developer console. Build it like serious internal software: searchable tables, useful dashboards, plain-language status labels, safe actions, and strong permission boundaries.

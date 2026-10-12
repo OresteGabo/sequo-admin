@@ -16,8 +16,7 @@ type SectionId =
 type Section = {
   id: SectionId
   label: string
-  endpoint: string
-  readiness: 'Live API' | 'Mock until wired' | 'Read-only'
+  statusLabel: 'Ready' | 'View only' | 'Setup needed'
   description: string
 }
 
@@ -83,14 +82,14 @@ type DashboardCard = {
   label: string
   value: string
   detail: string
-  source: 'API' | 'Local demo'
+  source: 'Live data' | 'Demo data'
 }
 
 type BusinessParameter = {
   label: string
   value: string
-  source: string
-  writeState: 'read-only' | 'backend endpoint needed'
+  owner: string
+  actionLabel: 'View only' | 'Setup needed'
 }
 
 type AdminUserRow = {
@@ -139,7 +138,7 @@ type ReturnRow = {
   refundStatus: string
   requestedRefundCfa: number
   action: string
-  endpoint: string
+  nextStep: string
 }
 
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
@@ -178,137 +177,127 @@ const sections: Section[] = [
   {
     id: 'dashboard',
     label: 'Dashboard',
-    endpoint: '/api/admin/web/overview',
-    readiness: 'Live API',
-    description: 'Operational totals and links for the internal admin workspace.',
+    statusLabel: 'Ready',
+    description: 'Daily operational totals and work that needs attention.',
   },
   {
     id: 'users',
     label: 'Users',
-    endpoint: '/api/admin/web/users',
-    readiness: 'Read-only',
-    description: 'Admin-safe account list without password hashes, OAuth tokens, or secrets.',
+    statusLabel: 'View only',
+    description: 'Customer, merchant, rider, relay and staff accounts.',
   },
   {
     id: 'merchants',
     label: 'Merchants',
-    endpoint: '/api/admin/web/merchants',
-    readiness: 'Read-only',
-    description: 'Merchant profile and commission context for support and operations.',
+    statusLabel: 'View only',
+    description: 'Merchant status, commission context and payment setup.',
   },
   {
     id: 'orders',
     label: 'Orders',
-    endpoint: '/api/admin/web/orders',
-    readiness: 'Read-only',
-    description: 'Customer order status, totals, payment status, and fulfillment priority.',
+    statusLabel: 'View only',
+    description: 'Customer orders, payment state and fulfillment priority.',
   },
   {
     id: 'deliveries',
     label: 'Deliveries',
-    endpoint: '/api/admin/web/deliveries',
-    readiness: 'Live API',
-    description: 'Delivery missions and merchant sub-order counts for dispatch decisions.',
+    statusLabel: 'Ready',
+    description: 'Courier activity, pickup pressure and delivery problems.',
   },
   {
     id: 'payments',
     label: 'Payments',
-    endpoint: '/api/admin/web/payments',
-    readiness: 'Read-only',
-    description: 'Merchant payout accruals and sanitized payment webhook history.',
+    statusLabel: 'View only',
+    description: 'Merchant payouts and payment events that need finance attention.',
   },
   {
     id: 'commissions',
     label: 'Commissions',
-    endpoint: '/api/admin/web/commissions',
-    readiness: 'Live API',
-    description: 'Default commission and merchant overrides; mutation remains in API-specific routes.',
+    statusLabel: 'Ready',
+    description: 'Default commission and merchant-specific commercial terms.',
   },
   {
     id: 'returns',
     label: 'Returns',
-    endpoint: '/api/returns',
-    readiness: 'Read-only',
-    description: 'Return requests, relay drop-off, physical receipt, inspection, and refund instruction state.',
+    statusLabel: 'View only',
+    description: 'Return requests, inspections and refund readiness.',
   },
   {
     id: 'relay',
     label: 'Relay points',
-    endpoint: '/api/admin/web/relay',
-    readiness: 'Read-only',
-    description: 'Relay parcels and storage-fee assessment count for relay operations.',
+    statusLabel: 'View only',
+    description: 'Relay parcels, overdue packages and local counter issues.',
   },
   {
     id: 'settings',
     label: 'Settings',
-    endpoint: '/api/admin/web/business-parameters',
-    readiness: 'Live API',
-    description: 'Contract MVP business parameters: delivery pricing, commissions, returns, relay policy references.',
+    statusLabel: 'Ready',
+    description: 'Business rules used by the SEQUO operation.',
   },
 ]
 
 const defaultSection = sections[0] as Section
 const active = computed<Section>(() => sections.find((section) => section.id === activeSection.value) ?? defaultSection)
 const metrics = computed(() => [
-  { label: 'API base', value: apiBaseUrl.replace(/^https?:\/\//, '') },
-  { label: 'Auth mode', value: isAuthenticated.value ? 'Admin verified' : 'Login required' },
-  { label: 'Endpoint', value: active.value.endpoint },
+  { label: 'Workspace', value: 'SEQUO operations' },
+  { label: 'Access', value: isAuthenticated.value ? 'Staff verified' : 'Login required' },
+  { label: 'Section', value: active.value.label },
 ])
 
 const mockRows: Record<SectionId, string[][]> = {
   dashboard: [
-    ['Operations snapshot', '/api/admin/monitoring/operations', 'Available'],
-    ['Admin web overview', '/api/admin/web/overview', 'Available'],
-    ['Health', '/actuator/health', 'Available'],
+    ['Today overview', 'Orders, deliveries, returns and payouts', 'Ready'],
+    ['Attention queue', 'Problems and delayed work', 'Ready'],
+    ['Service health', 'General platform availability', 'Ready'],
   ],
   users: [
-    ['Admin user', 'ADMIN / SUPER_ADMIN', 'Read-only list'],
-    ['Support user', 'SUPPORT_AGENT', 'Not enough for admin web shell'],
+    ['Admin user', 'Can manage internal workspace', 'View only'],
+    ['Support user', 'Can help customers and merchants', 'Needs role review'],
   ],
   merchants: [
-    ['Merchant profile', 'Commission rate, status, wallet provider', 'Sensitive wallet ref hidden'],
-    ['Storefront moderation', 'Pending backend workflow', 'Disabled in MVP shell'],
+    ['Merchant profile', 'Status, commission and payment setup', 'View only'],
+    ['Storefront review', 'Products and shop readiness', 'Setup needed'],
   ],
   orders: [
-    ['Order ledger', 'Totals, route, payment status', 'Read-only'],
-    ['Return/refund actions', '/api/returns', 'Use existing route with confirmation later'],
+    ['Order ledger', 'Totals, delivery choice and payment status', 'View only'],
+    ['Return/refund actions', 'Handled from the returns workspace', 'Confirmation needed'],
   ],
   deliveries: [
-    ['Mission control', '/api/delivery/missions', 'Existing operational routes'],
-    ['Rider scoped routes', '/api/rider/missions', 'Mobile rider app route'],
+    ['Mission control', 'Courier assignment and status', 'Ready'],
+    ['Rider app activity', 'Courier mobile workflow', 'Ready'],
   ],
   payments: [
-    ['Merchant payouts', '/api/settlements/merchant-payouts', 'Existing route'],
-    ['Webhook events', '/api/admin/web/payments', 'Sanitized read model'],
+    ['Merchant payouts', 'Amounts waiting for review', 'View only'],
+    ['Payment events', 'Safe finance history', 'View only'],
   ],
   commissions: [
-    ['Merchant override read', '/api/commissions/merchant-overrides/{merchantId}', 'Existing route'],
-    ['Admin facade', '/api/admin/web/commissions', 'Read model'],
+    ['Merchant commercial terms', 'Commission override per merchant', 'View only'],
+    ['Default policy', 'Standard SEQUO commission', 'Ready'],
   ],
   returns: [
-    ['Return request list', '/api/returns', 'Available by customer/support/admin scope'],
-    ['Physical receipt', '/api/returns/{returnId}/physical-receipt', 'Support/admin route exists'],
-    ['Refund instruction', '/api/returns/{returnId}/refund', 'Admin route exists after receipt/check'],
+    ['Return request list', 'Customer and support follow-up', 'Ready'],
+    ['Physical receipt', 'Confirm product arrived at SEQUO', 'Ready'],
+    ['Refund instruction', 'Finance action after inspection', 'Ready'],
   ],
   relay: [
-    ['Relay parcels', '/api/relay/parcels', 'Existing operational route'],
-    ['Admin relay summary', '/api/admin/web/relay', 'Read model'],
+    ['Relay parcels', 'Packages at partner counters', 'View only'],
+    ['Relay summary', 'Overdue and problem parcels', 'View only'],
   ],
   settings: [
-    ['Delivery pricing', '/api/admin/web/delivery-pricing', 'Read model'],
-    ['Business parameters', '/api/admin/web/business-parameters', 'Read model'],
+    ['Delivery pricing', 'Minimum price and extra kilometers', 'View only'],
+    ['Business rules', 'Returns, relay fees and commission policy', 'View only'],
   ],
 }
 
 const dashboardCards = computed<DashboardCard[]>(() => {
   const snapshot = dashboardSnapshot.value
   const overview = dashboardOverview.value
-  const source: DashboardCard['source'] = snapshot || overview ? 'API' : 'Local demo'
+  const source: DashboardCard['source'] = snapshot || overview ? 'Live data' : 'Demo data'
   return [
     {
       label: 'Pending orders',
       value: formatCount(overview?.totals?.orders ?? 0),
-      detail: overview ? 'Total order records in admin overview' : 'Waiting for admin overview endpoint',
+      detail: overview ? 'Total orders visible to the admin team' : 'Demo value until live data is available',
       source,
     },
     {
@@ -351,17 +340,17 @@ const dashboardCards = computed<DashboardCard[]>(() => {
 })
 
 const businessParameters: BusinessParameter[] = [
-  { label: 'Minimum delivery price', value: '400 CFA', source: '/api/admin/web/delivery-pricing', writeState: 'read-only' },
-  { label: 'Price per extra kilometer', value: '100 CFA', source: '/api/admin/web/delivery-pricing', writeState: 'read-only' },
-  { label: 'Default commission', value: '15%', source: '/api/admin/web/commissions', writeState: 'read-only' },
-  { label: 'Merchant commission overrides', value: 'Existing per merchant', source: '/api/commissions/merchant-overrides/{merchantId}', writeState: 'read-only' },
-  { label: 'Subscriber discount rates', value: 'Prepared in subscription domain', source: 'subscription domain', writeState: 'backend endpoint needed' },
-  { label: 'Referral delivery credits', value: 'Delivery credit only', source: 'referral domain', writeState: 'backend endpoint needed' },
-  { label: 'Bargaining attempt count', value: '3 attempts default', source: 'bargaining domain', writeState: 'backend endpoint needed' },
-  { label: 'Negotiated price lock duration', value: '24 hours', source: 'bargaining domain', writeState: 'backend endpoint needed' },
-  { label: 'Return request delay', value: '72 hours after delivery', source: 'returns domain', writeState: 'backend endpoint needed' },
-  { label: 'Relay storage delay and fee', value: 'After two weeks', source: 'relay domain', writeState: 'backend endpoint needed' },
-  { label: 'Categories excluded from relay/returns', value: 'Policy-backed category rules', source: 'relay / returns policy', writeState: 'backend endpoint needed' },
+  { label: 'Minimum delivery price', value: '400 CFA', owner: 'Delivery team', actionLabel: 'View only' },
+  { label: 'Price per extra kilometer', value: '100 CFA', owner: 'Delivery team', actionLabel: 'View only' },
+  { label: 'Default commission', value: '15%', owner: 'Commercial team', actionLabel: 'View only' },
+  { label: 'Merchant commission exceptions', value: 'Set per merchant', owner: 'Commercial team', actionLabel: 'View only' },
+  { label: 'Subscriber discount rates', value: 'Prepared', owner: 'Growth team', actionLabel: 'Setup needed' },
+  { label: 'Referral delivery credits', value: 'Delivery credit only', owner: 'Growth team', actionLabel: 'Setup needed' },
+  { label: 'Bargaining attempt count', value: '3 attempts default', owner: 'Commercial team', actionLabel: 'Setup needed' },
+  { label: 'Negotiated price lock duration', value: '24 hours', owner: 'Commercial team', actionLabel: 'Setup needed' },
+  { label: 'Return request delay', value: '72 hours after delivery', owner: 'Support team', actionLabel: 'Setup needed' },
+  { label: 'Relay storage delay and fee', value: 'After two weeks', owner: 'Relay team', actionLabel: 'Setup needed' },
+  { label: 'Excluded product categories', value: 'Food and perishables protected', owner: 'Operations team', actionLabel: 'Setup needed' },
 ]
 
 const roleOptions: Array<'ALL' | RoleCode> = ['ALL', 'CUSTOMER', 'COURIER', 'MERCHANT_OWNER', 'MERCHANT_STAFF', 'RELAY_PARTNER', 'SUPPORT_AGENT', 'ADMIN', 'SUPER_ADMIN']
@@ -416,15 +405,15 @@ const displayedOrders = computed(() => {
 })
 const selectedOrder = computed(() => displayedOrders.value.find((order) => order.id === selectedOrderId.value) ?? displayedOrders.value[0] ?? null)
 const returnRows: ReturnRow[] = [
-  { id: 'RET-2041', orderId: 'ORD-80354', stage: 'Dropped at relay', refundStatus: 'Not eligible until SEQUO receipt', requestedRefundCfa: 12500, action: 'Receive physical item', endpoint: '/api/returns/{returnId}/physical-receipt' },
-  { id: 'RET-2038', orderId: 'ORD-80291', stage: 'Under inspection', refundStatus: 'Pending condition check', requestedRefundCfa: 38000, action: 'Review condition', endpoint: 'backend endpoint needed for approve/reject detail' },
-  { id: 'RET-2031', orderId: 'ORD-80188', stage: 'Receipt verified', refundStatus: 'Refund instruction ready', requestedRefundCfa: 7900, action: 'Trigger refund instruction', endpoint: '/api/returns/{returnId}/refund' },
-  { id: 'RET-2029', orderId: 'ORD-80120', stage: 'Problem', refundStatus: 'Blocked', requestedRefundCfa: 15400, action: 'Investigate', endpoint: 'backend endpoint needed for dispute workflow' },
+  { id: 'RET-2041', orderId: 'ORD-80354', stage: 'Dropped at relay', refundStatus: 'Waiting for SEQUO receipt', requestedRefundCfa: 12500, action: 'Receive physical item', nextStep: 'Confirm product arrived at SEQUO' },
+  { id: 'RET-2038', orderId: 'ORD-80291', stage: 'Under inspection', refundStatus: 'Pending condition check', requestedRefundCfa: 38000, action: 'Review condition', nextStep: 'Record inspection decision' },
+  { id: 'RET-2031', orderId: 'ORD-80188', stage: 'Receipt verified', refundStatus: 'Refund instruction ready', requestedRefundCfa: 7900, action: 'Prepare refund instruction', nextStep: 'Send to finance team' },
+  { id: 'RET-2029', orderId: 'ORD-80120', stage: 'Problem', refundStatus: 'Blocked', requestedRefundCfa: 15400, action: 'Investigate', nextStep: 'Assign support follow-up' },
 ]
 const displayedReturns = computed(() => {
   const query = returnSearch.value.trim().toLowerCase()
   if (!query) return returnRows
-  return returnRows.filter((item) => [item.id, item.orderId, item.stage, item.refundStatus, item.action, item.endpoint].some((value) => value.toLowerCase().includes(query)))
+  return returnRows.filter((item) => [item.id, item.orderId, item.stage, item.refundStatus, item.action, item.nextStep].some((value) => value.toLowerCase().includes(query)))
 })
 
 function selectSection(section: SectionId) {
@@ -453,7 +442,7 @@ onMounted(() => {
 
 async function verifySession() {
   if (!accessToken.value.trim()) {
-    authError.value = 'Add an access token before continuing.'
+    authError.value = 'Enter your staff access key before continuing.'
     return
   }
   authLoading.value = true
@@ -616,6 +605,50 @@ function formatCount(value: number): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
 }
 
+function humanize(value?: string | null): string {
+  if (!value) return 'Not available'
+  const specialLabels: Record<string, string> = {
+    ADMIN: 'Admin',
+    SUPER_ADMIN: 'Super admin',
+    SUPPORT_AGENT: 'Support',
+    CUSTOMER: 'Customer',
+    COURIER: 'Courier',
+    MERCHANT_OWNER: 'Merchant owner',
+    MERCHANT_STAFF: 'Merchant staff',
+    RELAY_PARTNER: 'Relay partner',
+    GOOGLE: 'Google',
+    EMAIL: 'Email',
+    LOCAL_DEV: 'Demo',
+    ACTIVE: 'Active',
+    INACTIVE: 'Inactive',
+    PAUSED: 'Paused',
+    PENDING_REVIEW: 'Pending review',
+    EXPRESS: 'Express',
+    CLASSIC: 'Classic',
+    HOME_DELIVERY: 'Home delivery',
+    RELAY_POINT: 'Relay point',
+    FASTEST_AVAILABLE: 'Fastest available',
+    LOWEST_COST: 'Lowest cost',
+    STANDARD: 'Standard',
+    VALIDATED: 'Paid',
+    PENDING: 'Pending',
+    ACCEPTED_FOR_FULFILLMENT: 'Accepted for fulfillment',
+    DELIVERED: 'Delivered',
+    YAS_TOGO: 'Yas Togo',
+    MOOV_AFRICA: 'Moov Africa',
+  }
+  return specialLabels[value] ?? value
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function humanizeRoles(roles: RoleCode[]): string {
+  return roles.map(humanize).join(', ')
+}
+
 function persistTokens() {
   sessionStorage.setItem('sequo_admin_access_token', accessToken.value)
   if (refreshToken.value) {
@@ -664,7 +697,7 @@ function getOrCreateDeviceId(): string {
           @click="selectSection(section.id)"
         >
           <span>{{ section.label }}</span>
-          <small>{{ section.readiness }}</small>
+          <small>{{ section.statusLabel }}</small>
         </button>
       </nav>
     </aside>
@@ -672,7 +705,7 @@ function getOrCreateDeviceId(): string {
     <section class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Contract MVP admin</p>
+          <p class="eyebrow">SEQUO management</p>
           <h1>{{ active.label }}</h1>
         </div>
         <div v-if="isAuthenticated" class="account-chip">
@@ -686,8 +719,8 @@ function getOrCreateDeviceId(): string {
           <p class="eyebrow">Secure entry</p>
           <h2>Sign in with a SEQUO admin account</h2>
           <p>
-            Paste a backend access token to verify `/api/auth/me`. Add a refresh token only for local development when you want
-            one refresh-and-retry attempt. Tokens stay in session storage and are cleared on sign out.
+            This workspace is for authorized SEQUO staff only. Use the temporary staff access key during setup, or open
+            the demo workspace to review the screens without changing real data.
           </p>
         </div>
         <label>
@@ -695,19 +728,19 @@ function getOrCreateDeviceId(): string {
           <input v-model="email" type="email" autocomplete="email" placeholder="admin@sequo.internal" />
         </label>
         <label>
-          Access token
-          <input v-model="accessToken" type="password" autocomplete="off" placeholder="Paste a local bearer token" />
+          Staff access key
+          <input v-model="accessToken" type="password" autocomplete="off" placeholder="Enter staff access key" />
         </label>
         <label>
-          Refresh token
-          <input v-model="refreshToken" type="password" autocomplete="off" placeholder="Optional local refresh token" />
+          Optional setup key
+          <input v-model="refreshToken" type="password" autocomplete="off" placeholder="Only if provided by SEQUO" />
         </label>
         <p v-if="authError" class="error-text">{{ authError }}</p>
         <div class="login-actions">
           <button type="button" :disabled="authLoading" @click="verifySession">
-            {{ authLoading ? 'Verifying...' : 'Verify admin session' }}
+            {{ authLoading ? 'Verifying...' : 'Continue' }}
           </button>
-          <button class="secondary" type="button" @click="useMockLogin">Use local mock login</button>
+          <button class="secondary" type="button" @click="useMockLogin">Open demo workspace</button>
         </div>
       </section>
 
@@ -735,7 +768,7 @@ function getOrCreateDeviceId(): string {
               <article v-for="card in dashboardCards" :key="card.label" class="dashboard-card">
                 <div class="dashboard-card-top">
                   <span>{{ card.label }}</span>
-                  <small :class="{ demo: card.source === 'Local demo' }">{{ card.source }}</small>
+                  <small :class="{ demo: card.source === 'Demo data' }">{{ card.source }}</small>
                 </div>
                 <strong>{{ card.value }}</strong>
                 <p>{{ card.detail }}</p>
@@ -757,7 +790,7 @@ function getOrCreateDeviceId(): string {
             <div class="filters">
               <input v-model="userSearch" type="search" placeholder="Search users, email, provider, role" />
               <select v-model="userRoleFilter" aria-label="Filter users by role">
-                <option v-for="role in roleOptions" :key="role" :value="role">{{ role }}</option>
+                <option v-for="role in roleOptions" :key="role" :value="role">{{ role === 'ALL' ? 'All roles' : humanize(role) }}</option>
               </select>
             </div>
             <div class="table" role="table" aria-label="Users and roles">
@@ -772,13 +805,13 @@ function getOrCreateDeviceId(): string {
                   <strong>{{ user.displayName || user.email || user.phoneNumber || user.id }}</strong>
                   <small>{{ user.email || user.phoneNumber || user.id }}</small>
                 </span>
-                <span role="cell">{{ user.provider }}</span>
-                <span role="cell">{{ user.roles.join(', ') }}</span>
-                <span role="cell">{{ user.active ? user.status : 'INACTIVE' }}</span>
+                <span role="cell">{{ humanize(user.provider) }}</span>
+                <span role="cell">{{ humanizeRoles(user.roles) }}</span>
+                <span role="cell">{{ user.active ? humanize(user.status) : 'Inactive' }}</span>
               </div>
             </div>
             <p>
-              Role mutation, suspension, password reset and session-revocation controls are disabled until dedicated admin endpoints exist.
+              Account changes are protected. Ask a supervisor before changing roles, suspending an account, or resetting access.
             </p>
           </article>
 
@@ -813,7 +846,7 @@ function getOrCreateDeviceId(): string {
                     <small>{{ merchant.id }}</small>
                   </span>
                   <span>{{ (merchant.commissionRateBps / 100).toFixed(2) }}%</span>
-                  <span>{{ merchant.status }}</span>
+                  <span>{{ humanize(merchant.status) }}</span>
                 </button>
               </div>
               <aside v-if="selectedMerchant" class="detail-card">
@@ -822,10 +855,10 @@ function getOrCreateDeviceId(): string {
                 <dl>
                   <div><dt>Owner</dt><dd>{{ selectedMerchant.ownerUserId || 'Not available' }}</dd></div>
                   <div><dt>Wallet</dt><dd>{{ selectedMerchant.walletProvider || 'Not configured' }}</dd></div>
-                  <div><dt>Catalog status</dt><dd>Read endpoint available; product mutation endpoint required</dd></div>
-                  <div><dt>Product count</dt><dd>Backend aggregate endpoint needed</dd></div>
+                  <div><dt>Catalog status</dt><dd>Product review tools are being prepared</dd></div>
+                  <div><dt>Product count</dt><dd>Not available yet</dd></div>
                 </dl>
-                <button type="button" disabled>Activate/deactivate products: backend endpoint needed</button>
+                <button type="button" disabled>Product activation is not ready yet</button>
               </aside>
             </div>
           </article>
@@ -859,29 +892,29 @@ function getOrCreateDeviceId(): string {
                 >
                   <span>
                     <strong>{{ order.id }}</strong>
-                    <small>{{ order.customerId }} · {{ order.route }}</small>
-                  </span>
-                  <span>{{ order.paymentStatus }}</span>
+                  <small>{{ order.customerId }} · {{ humanize(order.route) }}</small>
+                </span>
+                  <span>{{ humanize(order.paymentStatus) }}</span>
                   <span>{{ order.totalCfa.toLocaleString('en-US') }} CFA</span>
-                  <span>{{ order.orderStatus }}</span>
+                  <span>{{ humanize(order.orderStatus) }}</span>
                 </button>
               </div>
               <aside v-if="selectedOrder" class="detail-card">
                 <p class="eyebrow">Order detail</p>
                 <h3>{{ selectedOrder.customerFacingStatus }}</h3>
                 <dl>
-                  <div><dt>Service</dt><dd>{{ selectedOrder.serviceLevel }} · {{ selectedOrder.fulfillmentPriority }}</dd></div>
+                  <div><dt>Service</dt><dd>{{ humanize(selectedOrder.serviceLevel) }} · {{ humanize(selectedOrder.fulfillmentPriority) }}</dd></div>
                   <div><dt>Items</dt><dd>{{ selectedOrder.itemSubtotalCfa.toLocaleString('en-US') }} CFA</dd></div>
                   <div><dt>Delivery</dt><dd>{{ selectedOrder.deliveryFeeCfa.toLocaleString('en-US') }} CFA</dd></div>
-                  <div><dt>Provider</dt><dd>{{ selectedOrder.paymentProvider }}</dd></div>
+                  <div><dt>Provider</dt><dd>{{ humanize(selectedOrder.paymentProvider) }}</dd></div>
                 </dl>
                 <ol class="timeline">
                   <li>Order accepted for fulfillment</li>
-                  <li>Merchant sub-orders tracked from `/api/merchant/sub-orders`</li>
-                  <li>Delivery missions tracked from `/api/delivery/missions`</li>
-                  <li>Relay fallback tracked from `/api/relay/parcels` when applicable</li>
+                  <li>Merchant package preparation tracked</li>
+                  <li>Courier delivery tracked</li>
+                  <li>Relay fallback tracked when applicable</li>
                 </ol>
-                <button type="button" disabled>Operational mutations require route-specific admin endpoints</button>
+                <button type="button" disabled>Operational changes are not ready yet</button>
               </aside>
             </div>
           </article>
@@ -892,7 +925,6 @@ function getOrCreateDeviceId(): string {
                 <p class="eyebrow">Reverse logistics</p>
                 <h2>Returns and refunds</h2>
               </div>
-              <code>/api/returns</code>
             </div>
             <p>
               Refund actions stay behind physical receipt and condition check. Cash refunds are not supported in this admin flow.
@@ -914,7 +946,7 @@ function getOrCreateDeviceId(): string {
                 <span role="cell">{{ item.refundStatus }}</span>
                 <span role="cell">
                   <strong>{{ item.action }}</strong>
-                  <small>{{ item.endpoint }}</small>
+                  <small>{{ item.nextStep }}</small>
                 </span>
               </div>
             </div>
@@ -923,23 +955,22 @@ function getOrCreateDeviceId(): string {
           <article v-else-if="active.id === 'settings'" class="panel">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">Annex A.6</p>
+                <p class="eyebrow">Business rules</p>
                 <h2>Business parameters</h2>
               </div>
-              <code>/api/admin/web/business-parameters</code>
             </div>
             <p>
-              These are contract MVP parameters. Values are displayed from implemented read endpoints or documented domain policy.
-              Write controls stay disabled until dedicated backend mutation endpoints exist.
+              These values control delivery prices, commissions, referrals, returns and relay fees. Some settings are view-only
+              while SEQUO finishes the approval process for changes.
             </p>
             <div class="settings-grid" aria-label="Business parameters">
               <article v-for="parameter in businessParameters" :key="parameter.label" class="setting-row">
                 <div>
                   <strong>{{ parameter.label }}</strong>
-                  <small>{{ parameter.source }}</small>
+                  <small>{{ parameter.owner }}</small>
                 </div>
                 <span>{{ parameter.value }}</span>
-                <button type="button" disabled>{{ parameter.writeState }}</button>
+                <button type="button" disabled>{{ parameter.actionLabel }}</button>
               </article>
             </div>
           </article>
@@ -947,17 +978,16 @@ function getOrCreateDeviceId(): string {
           <article v-else class="panel">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">{{ active.readiness }}</p>
+                <p class="eyebrow">{{ active.statusLabel }}</p>
                 <h2>{{ active.label }}</h2>
               </div>
-              <code>{{ active.endpoint }}</code>
             </div>
             <p>{{ active.description }}</p>
 
             <div class="table" role="table" aria-label="Section rows">
               <div class="table-row table-head" role="row">
                 <span role="columnheader">Item</span>
-                <span role="columnheader">Source</span>
+                <span role="columnheader">Meaning</span>
                 <span role="columnheader">State</span>
               </div>
               <div v-for="row in mockRows[active.id]" :key="row.join('-')" class="table-row" role="row">
@@ -969,12 +999,12 @@ function getOrCreateDeviceId(): string {
           </article>
 
           <aside class="panel compact">
-            <p class="eyebrow">Safety rules</p>
+            <p class="eyebrow">Staff reminders</p>
             <ul>
-              <li>Use backend routes under <code>/api</code> only.</li>
-              <li>Do not store secrets in browser code.</li>
-              <li>Keep unsupported actions disabled until endpoints exist.</li>
-              <li>Show safe user-facing errors only.</li>
+              <li>Check the customer, merchant and order before taking action.</li>
+              <li>Do not share private customer or payment information outside SEQUO.</li>
+              <li>Leave unavailable actions disabled until a supervisor enables them.</li>
+              <li>Use clear notes when a case needs follow-up.</li>
             </ul>
           </aside>
         </section>
