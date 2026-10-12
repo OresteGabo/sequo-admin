@@ -279,6 +279,63 @@ h2 {
   align-self: center;
 }
 
+.approval-code-card {
+  border: 1px solid rgba(22, 163, 106, 0.22);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f3fbf7 0%, #e8f7ef 100%);
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.approval-code-card > .material-symbols-rounded {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: white;
+  color: var(--green-dark);
+  box-shadow: var(--shadow-soft);
+}
+
+.approval-code-card small,
+.approval-code-card strong,
+.approval-code-card p {
+  display: block;
+}
+
+.approval-code-card small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.approval-code-card strong {
+  margin-top: 4px;
+  color: var(--green-ink);
+  font-size: clamp(30px, 4vw, 44px);
+  letter-spacing: 0.08em;
+}
+
+.approval-code-card p,
+.login-help {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.approval-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 label {
   display: grid;
   gap: 8px;
@@ -356,6 +413,15 @@ button:disabled {
   border-radius: 8px;
   background: var(--red-soft);
   color: var(--red);
+  padding: 10px 12px;
+  font-weight: 800;
+}
+
+.notice-text {
+  border: 1px solid rgba(22, 163, 106, 0.18);
+  border-radius: 8px;
+  background: var(--mint-2);
+  color: var(--green-dark);
   padding: 10px 12px;
   font-weight: 800;
 }

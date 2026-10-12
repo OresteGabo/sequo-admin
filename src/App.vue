@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 type SectionId =
   | 'dashboard'
@@ -47,6 +47,26 @@ type AuthTokens = {
   accessToken: string
   refreshToken: string
   expiresIn: number
+}
+
+type AdminLoginRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'CONSUMED'
+
+type AdminLoginStartResponse = {
+  requestId: string
+  code: string
+  expiresAt: string
+  pollingIntervalSeconds: number
+}
+
+type AdminLoginStatusResponse = {
+  status: AdminLoginRequestStatus
+  expiresAt: string
+  approvedAt?: string | null
+  rejectedAt?: string | null
+}
+
+type AdminLoginExchangeResponse = AuthTokens & {
+  user: CurrentUser
 }
 
 type AdminOverview = {
@@ -149,7 +169,15 @@ const accessToken = ref('')
 const refreshToken = ref('')
 const currentUser = ref<CurrentUser | null>(null)
 const authError = ref('')
+const authNotice = ref('')
 const authLoading = ref(false)
+const loginRequestId = ref('')
+const loginCode = ref('')
+const loginStatus = ref<AdminLoginRequestStatus | ''>('')
+const loginExpiresAt = ref('')
+const loginPollingIntervalSeconds = ref(2)
+const loginPollTimer = ref<ReturnType<typeof window.setInterval> | null>(null)
+const exchangeInProgress = ref(false)
 const dashboardLoading = ref(false)
 const dashboardError = ref('')
 const dashboardOverview = ref<AdminOverview | null>(null)
@@ -173,6 +201,12 @@ const returnSearch = ref('')
 const deviceId = getOrCreateDeviceId()
 const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
 const isAuthenticated = computed(() => Boolean(accessToken.value.trim() && isAdmin.value))
+const hasPendingPhoneLogin = computed(() => Boolean(loginRequestId.value && loginCode.value && loginStatus.value === 'PENDING'))
+const canRequestPhoneLogin = computed(() => Boolean(email.value.trim()) && !authLoading.value && !exchangeInProgress.value)
+const loginStatusLabel = computed(() => {
+  if (!loginStatus.value) return 'Ready'
+  return humanize(loginStatus.value)
+})
 
 const sections: Section[] = [
   {
@@ -458,9 +492,13 @@ onMounted(() => {
   }
 })
 
+onUnmounted(() => {
+  stopLoginPolling()
+})
+
 async function verifySession() {
   if (!accessToken.value.trim()) {
-    authError.value = 'Enter your staff access key before continuing.'
+    authError.value = 'Request a phone login before continuing.'
     return
   }
   authLoading.value = true
@@ -483,6 +521,116 @@ async function verifySession() {
     authError.value = 'We could not verify this admin session.'
   } finally {
     authLoading.value = false
+  }
+}
+
+async function requestPhoneLogin() {
+  if (!canRequestPhoneLogin.value) return
+  stopLoginPolling()
+  authLoading.value = true
+  authError.value = ''
+  authNotice.value = ''
+  loginRequestId.value = ''
+  loginCode.value = ''
+  loginStatus.value = ''
+  loginExpiresAt.value = ''
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/admin-auth/login-requests`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: email.value.trim(),
+        deviceLabel: browserDeviceLabel(),
+        browserInfo: navigator.userAgent.slice(0, 180),
+      }),
+    })
+    if (!response.ok) throw new Error('request_failed')
+    const body = (await response.json()) as AdminLoginStartResponse
+    loginRequestId.value = body.requestId
+    loginCode.value = body.code
+    loginExpiresAt.value = body.expiresAt
+    loginPollingIntervalSeconds.value = Math.max(2, body.pollingIntervalSeconds || 2)
+    loginStatus.value = 'PENDING'
+    authNotice.value = 'Open SEQUO on your phone and approve this code.'
+    startLoginPolling()
+  } catch {
+    authError.value = 'We could not create a phone login request. Try again in a moment.'
+  } finally {
+    authLoading.value = false
+  }
+}
+
+function startLoginPolling() {
+  stopLoginPolling()
+  void pollPhoneLoginStatus()
+  loginPollTimer.value = window.setInterval(() => {
+    void pollPhoneLoginStatus()
+  }, loginPollingIntervalSeconds.value * 1000)
+}
+
+function stopLoginPolling() {
+  if (loginPollTimer.value) {
+    window.clearInterval(loginPollTimer.value)
+    loginPollTimer.value = null
+  }
+}
+
+async function pollPhoneLoginStatus() {
+  if (!loginRequestId.value || exchangeInProgress.value) return
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/admin-auth/login-requests/${loginRequestId.value}`, {
+      headers: { Accept: 'application/json' },
+    })
+    if (!response.ok) throw new Error('request_failed')
+    const body = (await response.json()) as AdminLoginStatusResponse
+    loginStatus.value = body.status
+    loginExpiresAt.value = body.expiresAt
+    if (body.status === 'APPROVED') {
+      stopLoginPolling()
+      await exchangeApprovedPhoneLogin()
+    }
+    if (body.status === 'REJECTED' || body.status === 'EXPIRED' || body.status === 'CONSUMED') {
+      stopLoginPolling()
+      authNotice.value = ''
+      authError.value = body.status === 'REJECTED'
+        ? 'This login request was rejected on the phone.'
+        : 'This login request is no longer active. Request a new code.'
+    }
+  } catch {
+    authError.value = 'We could not check the phone approval yet.'
+  }
+}
+
+async function exchangeApprovedPhoneLogin() {
+  if (!loginRequestId.value || !loginCode.value || exchangeInProgress.value) return
+  exchangeInProgress.value = true
+  authError.value = ''
+  authNotice.value = 'Approval received. Opening the workspace.'
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/admin-auth/login-requests/${loginRequestId.value}/exchange`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code: loginCode.value, deviceId }),
+    })
+    if (!response.ok) throw new Error('request_failed')
+    const body = (await response.json()) as AdminLoginExchangeResponse
+    accessToken.value = body.accessToken
+    refreshToken.value = body.refreshToken
+    currentUser.value = body.user
+    persistTokens()
+    loginStatus.value = 'CONSUMED'
+    authNotice.value = ''
+    await verifySession()
+  } catch {
+    authError.value = 'Approval was received, but the workspace could not open. Request a new code.'
+  } finally {
+    exchangeInProgress.value = false
   }
 }
 
@@ -677,10 +825,16 @@ function persistTokens() {
 }
 
 function clearSession() {
+  stopLoginPolling()
   accessToken.value = ''
   refreshToken.value = ''
   currentUser.value = null
   authError.value = ''
+  authNotice.value = ''
+  loginRequestId.value = ''
+  loginCode.value = ''
+  loginStatus.value = ''
+  loginExpiresAt.value = ''
   sessionStorage.removeItem('sequo_admin_access_token')
   sessionStorage.removeItem('sequo_admin_refresh_token')
 }
@@ -691,6 +845,11 @@ function getOrCreateDeviceId(): string {
   const generated = `sequo-admin-web-${crypto.randomUUID()}`
   localStorage.setItem('sequo_admin_device_id', generated)
   return generated
+}
+
+function browserDeviceLabel(): string {
+  const platform = navigator.platform || 'computer'
+  return `Admin web on ${platform}`.slice(0, 80)
 }
 </script>
 
@@ -757,25 +916,33 @@ function getOrCreateDeviceId(): string {
               Work email
               <input v-model="email" type="email" autocomplete="email" placeholder="admin@sequo.internal" />
             </label>
-            <label>
-              Staff access key
-              <input v-model="accessToken" type="password" autocomplete="off" placeholder="Enter staff access key" />
-            </label>
-            <label>
-              Optional setup key
-              <input v-model="refreshToken" type="password" autocomplete="off" placeholder="Only if provided by SEQUO" />
-            </label>
+            <div v-if="loginCode" class="approval-code-card" aria-live="polite">
+              <span class="material-symbols-rounded" aria-hidden="true">phonelink_lock</span>
+              <div>
+                <small>Approval code</small>
+                <strong>{{ loginCode }}</strong>
+                <p>Compare this code on your phone before approving.</p>
+              </div>
+            </div>
+            <div v-if="loginRequestId" class="approval-status">
+              <span class="status-pill">{{ loginStatusLabel }}</span>
+              <span v-if="loginExpiresAt">Valid until {{ new Date(loginExpiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
+            </div>
+            <p v-if="authNotice" class="notice-text">{{ authNotice }}</p>
             <p v-if="authError" class="error-text">{{ authError }}</p>
             <div class="login-actions">
-              <button type="button" :disabled="authLoading" @click="verifySession">
-                <span class="material-symbols-rounded" aria-hidden="true">login</span>
-                {{ authLoading ? 'Verifying...' : 'Continue' }}
+              <button type="button" :disabled="!canRequestPhoneLogin" @click="requestPhoneLogin">
+                <span class="material-symbols-rounded" aria-hidden="true">password</span>
+                {{ authLoading ? 'Requesting...' : hasPendingPhoneLogin ? 'Request new code' : 'Request phone code' }}
               </button>
               <button class="secondary" type="button" @click="useMockLogin">
                 <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
                 Open demo workspace
               </button>
             </div>
+            <p class="login-help">
+              Approve from an already signed-in SEQUO mobile app. Use demo mode only for training.
+            </p>
           </div>
         </div>
       </section>
