@@ -18,6 +18,7 @@ type Section = {
   label: string
   statusLabel: 'Ready' | 'View only' | 'Setup needed'
   description: string
+  icon: string
 }
 
 type RoleCode =
@@ -179,60 +180,70 @@ const sections: Section[] = [
     label: 'Dashboard',
     statusLabel: 'Ready',
     description: 'Daily operational totals and work that needs attention.',
+    icon: 'dashboard',
   },
   {
     id: 'users',
     label: 'Users',
     statusLabel: 'View only',
     description: 'Customer, merchant, rider, relay and staff accounts.',
+    icon: 'groups',
   },
   {
     id: 'merchants',
     label: 'Merchants',
     statusLabel: 'View only',
     description: 'Merchant status, commission context and payment setup.',
+    icon: 'storefront',
   },
   {
     id: 'orders',
     label: 'Orders',
     statusLabel: 'View only',
     description: 'Customer orders, payment state and fulfillment priority.',
+    icon: 'receipt_long',
   },
   {
     id: 'deliveries',
     label: 'Deliveries',
     statusLabel: 'Ready',
     description: 'Courier activity, pickup pressure and delivery problems.',
+    icon: 'local_shipping',
   },
   {
     id: 'payments',
     label: 'Payments',
     statusLabel: 'View only',
     description: 'Merchant payouts and payment events that need finance attention.',
+    icon: 'payments',
   },
   {
     id: 'commissions',
     label: 'Commissions',
     statusLabel: 'Ready',
     description: 'Default commission and merchant-specific commercial terms.',
+    icon: 'percent',
   },
   {
     id: 'returns',
     label: 'Returns',
     statusLabel: 'View only',
     description: 'Return requests, inspections and refund readiness.',
+    icon: 'assignment_return',
   },
   {
     id: 'relay',
     label: 'Relay points',
     statusLabel: 'View only',
     description: 'Relay parcels, overdue packages and local counter issues.',
+    icon: 'inventory_2',
   },
   {
     id: 'settings',
     label: 'Settings',
     statusLabel: 'Ready',
     description: 'Business rules used by the SEQUO operation.',
+    icon: 'tune',
   },
 ]
 
@@ -242,6 +253,13 @@ const metrics = computed(() => [
   { label: 'Workspace', value: 'SEQUO operations' },
   { label: 'Access', value: isAuthenticated.value ? 'Staff verified' : 'Login required' },
   { label: 'Section', value: active.value.label },
+])
+
+const priorityActions = computed(() => [
+  { label: 'Orders waiting', value: dashboardCards.value[0]?.value ?? '0', detail: 'Open the order list first', target: 'orders' as SectionId, icon: 'pending_actions' },
+  { label: 'Packages to collect', value: dashboardCards.value[1]?.value ?? '0', detail: 'Coordinate merchant pickup', target: 'deliveries' as SectionId, icon: 'package_2' },
+  { label: 'Returns to review', value: dashboardCards.value[4]?.value ?? '0', detail: 'Check inspection queue', target: 'returns' as SectionId, icon: 'assignment_return' },
+  { label: 'Payment follow-up', value: dashboardCards.value[5]?.value ?? '0', detail: 'Review finance queue', target: 'payments' as SectionId, icon: 'account_balance_wallet' },
 ])
 
 const mockRows: Record<SectionId, string[][]> = {
@@ -680,11 +698,8 @@ function getOrCreateDeviceId(): string {
   <main class="admin-shell">
     <aside class="sidebar">
       <div class="brand">
-        <span class="brand-mark">S</span>
-        <div>
-          <strong>SEQUO Admin</strong>
-          <small>Internal operations</small>
-        </div>
+        <img class="brand-logo" src="/brand/sequo-primary-light.png" alt="SEQUO" />
+        <small>Management workspace</small>
       </div>
 
       <nav class="nav-list" aria-label="Admin sections">
@@ -696,60 +711,109 @@ function getOrCreateDeviceId(): string {
           type="button"
           @click="selectSection(section.id)"
         >
-          <span>{{ section.label }}</span>
-          <small>{{ section.statusLabel }}</small>
+          <span class="material-symbols-rounded" aria-hidden="true">{{ section.icon }}</span>
+          <span class="nav-copy">
+            <strong>{{ section.label }}</strong>
+            <small>{{ section.statusLabel }}</small>
+          </span>
         </button>
       </nav>
     </aside>
 
     <section class="workspace">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">SEQUO management</p>
-          <h1>{{ active.label }}</h1>
+        <div class="topbar-title">
+          <img class="topbar-logo" src="/brand/sequo-icon-green.png" alt="" />
+          <div>
+            <p class="eyebrow">SEQUO management</p>
+            <h1>{{ active.label }}</h1>
+          </div>
         </div>
         <div v-if="isAuthenticated" class="account-chip">
+          <span class="material-symbols-rounded" aria-hidden="true">admin_panel_settings</span>
           <span>{{ currentUser?.displayName || currentUser?.email || 'SEQUO Admin' }}</span>
           <button class="secondary" type="button" @click="signOut">Sign out</button>
         </div>
       </header>
 
       <section v-if="!isAuthenticated" class="login-panel" aria-label="Admin login">
-        <div>
-          <p class="eyebrow">Secure entry</p>
-          <h2>Sign in with a SEQUO admin account</h2>
-          <p>
-            This workspace is for authorized SEQUO staff only. Use the temporary staff access key during setup, or open
-            the demo workspace to review the screens without changing real data.
-          </p>
-        </div>
-        <label>
-          Work email
-          <input v-model="email" type="email" autocomplete="email" placeholder="admin@sequo.internal" />
-        </label>
-        <label>
-          Staff access key
-          <input v-model="accessToken" type="password" autocomplete="off" placeholder="Enter staff access key" />
-        </label>
-        <label>
-          Optional setup key
-          <input v-model="refreshToken" type="password" autocomplete="off" placeholder="Only if provided by SEQUO" />
-        </label>
-        <p v-if="authError" class="error-text">{{ authError }}</p>
-        <div class="login-actions">
-          <button type="button" :disabled="authLoading" @click="verifySession">
-            {{ authLoading ? 'Verifying...' : 'Continue' }}
-          </button>
-          <button class="secondary" type="button" @click="useMockLogin">Open demo workspace</button>
+        <div class="login-hero">
+          <div class="login-hero-copy">
+            <img src="/brand/sequo-primary-light.png" alt="SEQUO" />
+            <p class="eyebrow">Staff workspace</p>
+            <h2>Manage daily SEQUO operations with clarity.</h2>
+            <p>
+              A calm control room for orders, merchants, riders, returns, relay points and finance follow-up.
+              Demo mode lets the team explore the workflow before live access is connected.
+            </p>
+            <div class="hero-pills" aria-label="Main admin work areas">
+              <span><span class="material-symbols-rounded" aria-hidden="true">receipt_long</span> Orders</span>
+              <span><span class="material-symbols-rounded" aria-hidden="true">storefront</span> Merchants</span>
+              <span><span class="material-symbols-rounded" aria-hidden="true">local_shipping</span> Deliveries</span>
+            </div>
+          </div>
+          <div class="login-card">
+            <label>
+              Work email
+              <input v-model="email" type="email" autocomplete="email" placeholder="admin@sequo.internal" />
+            </label>
+            <label>
+              Staff access key
+              <input v-model="accessToken" type="password" autocomplete="off" placeholder="Enter staff access key" />
+            </label>
+            <label>
+              Optional setup key
+              <input v-model="refreshToken" type="password" autocomplete="off" placeholder="Only if provided by SEQUO" />
+            </label>
+            <p v-if="authError" class="error-text">{{ authError }}</p>
+            <div class="login-actions">
+              <button type="button" :disabled="authLoading" @click="verifySession">
+                <span class="material-symbols-rounded" aria-hidden="true">login</span>
+                {{ authLoading ? 'Verifying...' : 'Continue' }}
+              </button>
+              <button class="secondary" type="button" @click="useMockLogin">
+                <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
+                Open demo workspace
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
       <template v-else>
-        <section class="metrics" aria-label="Current section context">
-          <article v-for="metric in metrics" :key="metric.label" class="metric-card">
-            <span>{{ metric.label }}</span>
-            <strong>{{ metric.value }}</strong>
-          </article>
+        <section class="hero-band" aria-label="Operational overview">
+          <div>
+            <p class="eyebrow">Today in Lome</p>
+            <h2>Start with what needs attention.</h2>
+            <p>{{ active.description }}</p>
+          </div>
+          <div class="hero-actions">
+            <button type="button" @click="selectSection('orders')">
+              <span class="material-symbols-rounded" aria-hidden="true">receipt_long</span>
+              View orders
+            </button>
+            <button class="secondary inverse" type="button" @click="selectSection('returns')">
+              <span class="material-symbols-rounded" aria-hidden="true">assignment_return</span>
+              Check returns
+            </button>
+          </div>
+        </section>
+
+        <section class="quick-grid" aria-label="Priority work">
+          <button
+            v-for="item in priorityActions"
+            :key="item.label"
+            class="quick-card"
+            type="button"
+            @click="selectSection(item.target)"
+          >
+            <span class="quick-icon material-symbols-rounded" aria-hidden="true">{{ item.icon }}</span>
+            <span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.label }}</small>
+            </span>
+            <em>{{ item.detail }}</em>
+          </button>
         </section>
 
         <section class="content-grid">
@@ -760,6 +824,7 @@ function getOrCreateDeviceId(): string {
                 <h2>Dashboard</h2>
               </div>
               <button class="secondary" type="button" :disabled="dashboardLoading" @click="loadDashboard">
+                <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
                 {{ dashboardLoading ? 'Refreshing...' : 'Refresh' }}
               </button>
             </div>
@@ -783,6 +848,7 @@ function getOrCreateDeviceId(): string {
                 <h2>Users and roles</h2>
               </div>
               <button class="secondary" type="button" :disabled="usersLoading" @click="loadUsers">
+                <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
                 {{ usersLoading ? 'Refreshing...' : 'Refresh' }}
               </button>
             </div>
@@ -805,14 +871,11 @@ function getOrCreateDeviceId(): string {
                   <strong>{{ user.displayName || user.email || user.phoneNumber || user.id }}</strong>
                   <small>{{ user.email || user.phoneNumber || user.id }}</small>
                 </span>
-                <span role="cell">{{ humanize(user.provider) }}</span>
+                <span role="cell"><span class="status-pill">{{ humanize(user.provider) }}</span></span>
                 <span role="cell">{{ humanizeRoles(user.roles) }}</span>
                 <span role="cell">{{ user.active ? humanize(user.status) : 'Inactive' }}</span>
               </div>
             </div>
-            <p>
-              Account changes are protected. Ask a supervisor before changing roles, suspending an account, or resetting access.
-            </p>
           </article>
 
           <article v-else-if="active.id === 'merchants'" class="panel">
@@ -822,6 +885,7 @@ function getOrCreateDeviceId(): string {
                 <h2>Merchants</h2>
               </div>
               <button class="secondary" type="button" :disabled="merchantsLoading" @click="loadMerchants">
+                <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
                 {{ merchantsLoading ? 'Refreshing...' : 'Refresh' }}
               </button>
             </div>
@@ -870,6 +934,7 @@ function getOrCreateDeviceId(): string {
                 <h2>Orders and delivery tracking</h2>
               </div>
               <button class="secondary" type="button" :disabled="ordersLoading" @click="loadOrders">
+                <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
                 {{ ordersLoading ? 'Refreshing...' : 'Refresh' }}
               </button>
             </div>
@@ -892,8 +957,8 @@ function getOrCreateDeviceId(): string {
                 >
                   <span>
                     <strong>{{ order.id }}</strong>
-                  <small>{{ order.customerId }} · {{ humanize(order.route) }}</small>
-                </span>
+                    <small>{{ order.customerId }} · {{ humanize(order.route) }}</small>
+                  </span>
                   <span>{{ humanize(order.paymentStatus) }}</span>
                   <span>{{ order.totalCfa.toLocaleString('en-US') }} CFA</span>
                   <span>{{ humanize(order.orderStatus) }}</span>
@@ -926,9 +991,7 @@ function getOrCreateDeviceId(): string {
                 <h2>Returns and refunds</h2>
               </div>
             </div>
-            <p>
-              Refund actions stay behind physical receipt and condition check. Cash refunds are not supported in this admin flow.
-            </p>
+            <p>Refund actions stay behind physical receipt and condition check. Cash refunds are not supported in this admin flow.</p>
             <input v-model="returnSearch" type="search" placeholder="Search return, order, stage, refund status" />
             <div class="table" role="table" aria-label="Returns and refunds">
               <div class="table-row return-row table-head" role="row">
@@ -959,10 +1022,7 @@ function getOrCreateDeviceId(): string {
                 <h2>Business parameters</h2>
               </div>
             </div>
-            <p>
-              These values control delivery prices, commissions, referrals, returns and relay fees. Some settings are view-only
-              while SEQUO finishes the approval process for changes.
-            </p>
+            <p>These values control delivery prices, commissions, referrals, returns and relay fees. Some settings are view-only while SEQUO finishes the approval process for changes.</p>
             <div class="settings-grid" aria-label="Business parameters">
               <article v-for="parameter in businessParameters" :key="parameter.label" class="setting-row">
                 <div>
@@ -975,15 +1035,13 @@ function getOrCreateDeviceId(): string {
             </div>
           </article>
 
-          <article v-else class="panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">{{ active.statusLabel }}</p>
-                <h2>{{ active.label }}</h2>
-              </div>
+          <article v-else class="panel section-overview">
+            <div class="section-hero-icon material-symbols-rounded" aria-hidden="true">{{ active.icon }}</div>
+            <div>
+              <p class="eyebrow">{{ active.statusLabel }}</p>
+              <h2>{{ active.label }}</h2>
+              <p>{{ active.description }}</p>
             </div>
-            <p>{{ active.description }}</p>
-
             <div class="table" role="table" aria-label="Section rows">
               <div class="table-row table-head" role="row">
                 <span role="columnheader">Item</span>
