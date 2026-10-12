@@ -177,6 +177,8 @@ const loginStatus = ref<AdminLoginRequestStatus | ''>('')
 const loginExpiresAt = ref('')
 const loginPollingIntervalSeconds = ref(2)
 const loginPollTimer = ref<ReturnType<typeof window.setInterval> | null>(null)
+const loginCountdownTimer = ref<ReturnType<typeof window.setInterval> | null>(null)
+const currentTimeMs = ref(Date.now())
 const exchangeInProgress = ref(false)
 const dashboardLoading = ref(false)
 const dashboardError = ref('')
@@ -206,6 +208,15 @@ const canRequestPhoneLogin = computed(() => Boolean(email.value.trim()) && !auth
 const loginStatusLabel = computed(() => {
   if (!loginStatus.value) return 'Ready'
   return humanize(loginStatus.value)
+})
+const loginCountdownLabel = computed(() => {
+  if (!loginExpiresAt.value) return ''
+  const remainingMs = new Date(loginExpiresAt.value).getTime() - currentTimeMs.value
+  if (remainingMs <= 0) return 'Expired'
+  const totalSeconds = Math.ceil(remainingMs / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = String(totalSeconds % 60).padStart(2, '0')
+  return `${minutes}:${seconds}`
 })
 
 const sections: Section[] = [
@@ -494,6 +505,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopLoginPolling()
+  stopCountdown()
 })
 
 async function verifySession() {
@@ -527,6 +539,7 @@ async function verifySession() {
 async function requestPhoneLogin() {
   if (!canRequestPhoneLogin.value) return
   stopLoginPolling()
+  stopCountdown()
   authLoading.value = true
   authError.value = ''
   authNotice.value = ''
@@ -555,6 +568,7 @@ async function requestPhoneLogin() {
     loginPollingIntervalSeconds.value = Math.max(2, body.pollingIntervalSeconds || 2)
     loginStatus.value = 'PENDING'
     authNotice.value = 'Open SEQUO on your phone and approve this code.'
+    startCountdown()
     startLoginPolling()
   } catch {
     authError.value = 'We could not create a phone login request. Try again in a moment.'
@@ -590,10 +604,12 @@ async function pollPhoneLoginStatus() {
     loginExpiresAt.value = body.expiresAt
     if (body.status === 'APPROVED') {
       stopLoginPolling()
+      stopCountdown()
       await exchangeApprovedPhoneLogin()
     }
     if (body.status === 'REJECTED' || body.status === 'EXPIRED' || body.status === 'CONSUMED') {
       stopLoginPolling()
+      stopCountdown()
       authNotice.value = ''
       authError.value = body.status === 'REJECTED'
         ? 'This login request was rejected on the phone.'
@@ -602,6 +618,39 @@ async function pollPhoneLoginStatus() {
   } catch {
     authError.value = 'We could not check the phone approval yet.'
   }
+}
+
+function startCountdown() {
+  stopCountdown()
+  currentTimeMs.value = Date.now()
+  loginCountdownTimer.value = window.setInterval(() => {
+    currentTimeMs.value = Date.now()
+    if (loginExpiresAt.value && new Date(loginExpiresAt.value).getTime() <= currentTimeMs.value) {
+      loginStatus.value = loginStatus.value === 'PENDING' ? 'EXPIRED' : loginStatus.value
+      authNotice.value = ''
+      authError.value = 'This login request is no longer active. Request a new code.'
+      stopLoginPolling()
+      stopCountdown()
+    }
+  }, 1000)
+}
+
+function stopCountdown() {
+  if (loginCountdownTimer.value) {
+    window.clearInterval(loginCountdownTimer.value)
+    loginCountdownTimer.value = null
+  }
+}
+
+function resetPhoneLogin() {
+  stopLoginPolling()
+  stopCountdown()
+  authError.value = ''
+  authNotice.value = ''
+  loginRequestId.value = ''
+  loginCode.value = ''
+  loginStatus.value = ''
+  loginExpiresAt.value = ''
 }
 
 async function exchangeApprovedPhoneLogin() {
@@ -826,6 +875,7 @@ function persistTokens() {
 
 function clearSession() {
   stopLoginPolling()
+  stopCountdown()
   accessToken.value = ''
   refreshToken.value = ''
   currentUser.value = null
@@ -926,6 +976,7 @@ function browserDeviceLabel(): string {
             </div>
             <div v-if="loginRequestId" class="approval-status">
               <span class="status-pill">{{ loginStatusLabel }}</span>
+              <span v-if="loginCountdownLabel">Time left {{ loginCountdownLabel }}</span>
               <span v-if="loginExpiresAt">Valid until {{ new Date(loginExpiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</span>
             </div>
             <p v-if="authNotice" class="notice-text">{{ authNotice }}</p>
@@ -938,6 +989,10 @@ function browserDeviceLabel(): string {
               <button class="secondary" type="button" @click="useMockLogin">
                 <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
                 Open demo workspace
+              </button>
+              <button v-if="loginRequestId" class="secondary" type="button" @click="resetPhoneLogin">
+                <span class="material-symbols-rounded" aria-hidden="true">alternate_email</span>
+                Use another email
               </button>
             </div>
             <p class="login-help">
