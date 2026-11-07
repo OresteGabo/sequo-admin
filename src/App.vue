@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue'
+import { readAdminSection, type AdminReadGroup, type AdminReadSection } from './adminReads'
 
 type SectionId =
   | 'dashboard'
@@ -135,14 +136,6 @@ type DashboardCard = {
   label: string
   value: string
   detail: string
-  source: 'Live data' | 'Demo data'
-}
-
-type BusinessParameter = {
-  label: string
-  value: string
-  owner: string
-  actionLabel: 'View only' | 'Setup needed'
 }
 
 type AdminUserRow = {
@@ -182,16 +175,6 @@ type AdminOrderRow = {
   orderStatus: string
   createdAt?: string
   updatedAt?: string
-}
-
-type ReturnRow = {
-  id: string
-  orderId: string
-  stage: string
-  refundStatus: string
-  requestedRefundCfa: number
-  action: string
-  nextStep: string
 }
 
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
@@ -241,7 +224,12 @@ const ordersError = ref('')
 const orderSearch = ref('')
 const selectedOrderId = ref('')
 const adminOrders = ref<AdminOrderRow[]>([])
-const returnSearch = ref('')
+const sectionLoading = ref(false)
+const sectionError = ref('')
+const sectionGroups = ref<AdminReadGroup[]>([])
+let sectionRequest = 0
+let sessionVersion = 0
+let refreshInFlight: Promise<boolean> | null = null
 const deviceId = getOrCreateDeviceId()
 let googleScriptPromise: Promise<void> | null = null
 const isAdmin = computed(() => Boolean(currentUser.value?.active && currentUser.value.roles.some((role) => role === 'ADMIN' || role === 'SUPER_ADMIN')))
@@ -363,131 +351,58 @@ const metrics = computed(() => [
 ])
 
 const priorityActions = computed(() => [
-  { label: 'Orders waiting', value: dashboardCards.value[0]?.value ?? '0', detail: 'Open the order list first', target: 'orders' as SectionId, icon: 'pending_actions' },
-  { label: 'Packages to collect', value: dashboardCards.value[1]?.value ?? '0', detail: 'Coordinate merchant pickup', target: 'deliveries' as SectionId, icon: 'package_2' },
-  { label: 'Returns to review', value: dashboardCards.value[4]?.value ?? '0', detail: 'Check inspection queue', target: 'returns' as SectionId, icon: 'assignment_return' },
-  { label: 'Payment follow-up', value: dashboardCards.value[5]?.value ?? '0', detail: 'Review finance queue', target: 'payments' as SectionId, icon: 'account_balance_wallet' },
+  { label: 'Total orders', value: dashboardCards.value[0]?.value ?? '—', detail: 'Open the order list first', target: 'orders' as SectionId, icon: 'pending_actions' },
+  { label: 'Packages to collect', value: dashboardCards.value[1]?.value ?? '—', detail: 'Coordinate merchant pickup', target: 'deliveries' as SectionId, icon: 'package_2' },
+  { label: 'Returns to review', value: dashboardCards.value[4]?.value ?? '—', detail: 'Check inspection queue', target: 'returns' as SectionId, icon: 'assignment_return' },
+  { label: 'Payment follow-up', value: dashboardCards.value[5]?.value ?? '—', detail: 'Review finance queue', target: 'payments' as SectionId, icon: 'account_balance_wallet' },
 ])
-
-const mockRows: Record<SectionId, string[][]> = {
-  dashboard: [
-    ['Today overview', 'Orders, deliveries, returns and payouts', 'Ready'],
-    ['Attention queue', 'Problems and delayed work', 'Ready'],
-    ['Service health', 'General platform availability', 'Ready'],
-  ],
-  users: [
-    ['Admin user', 'Can manage internal workspace', 'View only'],
-    ['Support user', 'Can help customers and merchants', 'Needs role review'],
-  ],
-  merchants: [
-    ['Merchant profile', 'Status, commission and payment setup', 'View only'],
-    ['Storefront review', 'Products and shop readiness', 'Setup needed'],
-  ],
-  orders: [
-    ['Order ledger', 'Totals, delivery choice and payment status', 'View only'],
-    ['Return/refund actions', 'Handled from the returns workspace', 'Confirmation needed'],
-  ],
-  deliveries: [
-    ['Mission control', 'Courier assignment and status', 'Ready'],
-    ['Rider app activity', 'Courier mobile workflow', 'Ready'],
-  ],
-  payments: [
-    ['Merchant payouts', 'Amounts waiting for review', 'View only'],
-    ['Payment events', 'Safe finance history', 'View only'],
-  ],
-  commissions: [
-    ['Merchant commercial terms', 'Commission override per merchant', 'View only'],
-    ['Default policy', 'Standard SEQUO commission', 'Ready'],
-  ],
-  returns: [
-    ['Return request list', 'Customer and support follow-up', 'Ready'],
-    ['Physical receipt', 'Confirm product arrived at SEQUO', 'Ready'],
-    ['Refund instruction', 'Finance action after inspection', 'Ready'],
-  ],
-  relay: [
-    ['Relay parcels', 'Packages at partner counters', 'View only'],
-    ['Relay summary', 'Overdue and problem parcels', 'View only'],
-  ],
-  settings: [
-    ['Delivery pricing', 'Minimum price and extra kilometers', 'View only'],
-    ['Business rules', 'Returns, relay fees and commission policy', 'View only'],
-  ],
-}
 
 const dashboardCards = computed<DashboardCard[]>(() => {
   const snapshot = dashboardSnapshot.value
   const overview = dashboardOverview.value
-  const source: DashboardCard['source'] = snapshot || overview ? 'Live data' : 'Demo data'
+  if (!overview || !snapshot) return []
   return [
     {
-      label: 'Pending orders',
+      label: 'Total orders',
       value: formatCount(overview?.totals?.orders ?? 0),
-      detail: overview ? 'Total orders visible to the admin team' : 'Demo value until live data is available',
-      source,
+      detail: 'Total orders visible to the admin team',
     },
     {
       label: 'Merchant packages waiting',
-      value: formatCount(snapshot?.merchantFulfillment?.sellerBacklog ?? 7),
-      detail: `${formatCount(snapshot?.merchantFulfillment?.readyForPickup ?? 3)} ready for pickup`,
-      source,
+      value: formatCount(snapshot?.merchantFulfillment?.sellerBacklog ?? 0),
+      detail: `${formatCount(snapshot?.merchantFulfillment?.readyForPickup ?? 0)} ready for pickup`,
     },
     {
       label: 'Active deliveries',
-      value: formatCount(snapshot?.deliveryCapacity?.activeMissions ?? 12),
+      value: formatCount(snapshot?.deliveryCapacity?.activeMissions ?? 0),
       detail: 'Created, offered, accepted, pickup, relay, or problem states',
-      source,
     },
     {
       label: 'Relay overdue packages',
-      value: formatCount(snapshot?.relayOperations?.delayedParcels ?? 4),
-      detail: `${formatCount(snapshot?.relayOperations?.problemParcels ?? 1)} relay problems`,
-      source,
+      value: formatCount(snapshot?.relayOperations?.delayedParcels ?? 0),
+      detail: `${formatCount(snapshot?.relayOperations?.problemParcels ?? 0)} relay problems`,
     },
     {
-      label: 'Returns awaiting inspection',
-      value: formatCount((snapshot?.returnBottlenecks?.returnsWaitingRelayAction ?? 2) + (snapshot?.returnBottlenecks?.returnsWaitingSequoCollection ?? 1)),
+      label: 'Returns awaiting handoff',
+      value: formatCount((snapshot?.returnBottlenecks?.returnsWaitingRelayAction ?? 0) + (snapshot?.returnBottlenecks?.returnsWaitingSequoCollection ?? 0)),
       detail: `${formatCount(snapshot?.returnBottlenecks?.returnsInProblem ?? 0)} return problems`,
-      source,
     },
     {
       label: 'Payment / settlement issues',
-      value: formatCount(snapshot?.payoutQueue?.merchantPayoutCandidates ?? 5),
+      value: formatCount(snapshot?.payoutQueue?.merchantPayoutCandidates ?? 0),
       detail: 'Merchant payouts needing finance attention',
-      source,
     },
     {
       label: 'Courier availability issues',
-      value: formatCount((snapshot?.deliveryCapacity?.pausedCouriers ?? 2) + (snapshot?.deliveryCapacity?.problemMissions?.length ?? 1)),
+      value: formatCount((snapshot?.deliveryCapacity?.pausedCouriers ?? 0) + (snapshot?.deliveryCapacity?.problemMissions?.length ?? 0)),
       detail: 'Paused couriers plus problem missions',
-      source,
     },
   ]
 })
 
-const businessParameters: BusinessParameter[] = [
-  { label: 'Minimum delivery price', value: '400 CFA', owner: 'Delivery team', actionLabel: 'View only' },
-  { label: 'Price per extra kilometer', value: '100 CFA', owner: 'Delivery team', actionLabel: 'View only' },
-  { label: 'Default commission', value: '15%', owner: 'Commercial team', actionLabel: 'View only' },
-  { label: 'Merchant commission exceptions', value: 'Set per merchant', owner: 'Commercial team', actionLabel: 'View only' },
-  { label: 'Subscriber discount rates', value: 'Prepared', owner: 'Growth team', actionLabel: 'Setup needed' },
-  { label: 'Referral delivery credits', value: 'Delivery credit only', owner: 'Growth team', actionLabel: 'Setup needed' },
-  { label: 'Bargaining attempt count', value: '3 attempts default', owner: 'Commercial team', actionLabel: 'Setup needed' },
-  { label: 'Negotiated price lock duration', value: '24 hours', owner: 'Commercial team', actionLabel: 'Setup needed' },
-  { label: 'Return request delay', value: '72 hours after delivery', owner: 'Support team', actionLabel: 'Setup needed' },
-  { label: 'Relay storage delay and fee', value: 'After two weeks', owner: 'Relay team', actionLabel: 'Setup needed' },
-  { label: 'Excluded product categories', value: 'Food and perishables protected', owner: 'Operations team', actionLabel: 'Setup needed' },
-]
-
 const roleOptions: Array<'ALL' | RoleCode> = ['ALL', 'CUSTOMER', 'COURIER', 'MERCHANT_OWNER', 'MERCHANT_STAFF', 'RELAY_PARTNER', 'SUPPORT_AGENT', 'ADMIN', 'SUPER_ADMIN']
-const localDemoUsers: AdminUserRow[] = [
-  { id: 'local-customer', email: 'customer@example.test', displayName: 'Customer account', provider: 'GOOGLE', status: 'ACTIVE', active: true, roles: ['CUSTOMER'] },
-  { id: 'local-courier', email: 'courier@example.test', displayName: 'Courier account', provider: 'GOOGLE', status: 'ACTIVE', active: true, roles: ['COURIER'] },
-  { id: 'local-merchant', email: 'merchant@example.test', displayName: 'Merchant owner', provider: 'GOOGLE', status: 'ACTIVE', active: true, roles: ['MERCHANT_OWNER'] },
-  { id: 'local-admin-user', email: 'admin@example.test', displayName: 'SEQUO admin', provider: 'EMAIL', status: 'ACTIVE', active: true, roles: ['ADMIN'] },
-  { id: 'local-relay', email: 'relay@example.test', displayName: 'Relay partner', provider: 'GOOGLE', status: 'ACTIVE', active: true, roles: ['RELAY_PARTNER'] },
-]
 const displayedUsers = computed(() => {
-  const source = adminUsers.value.length > 0 ? adminUsers.value : localDemoUsers
+  const source = adminUsers.value
   const query = userSearch.value.trim().toLowerCase()
   return source
     .filter((user) => userRoleFilter.value === 'ALL' || user.roles.includes(userRoleFilter.value))
@@ -498,13 +413,8 @@ const displayedUsers = computed(() => {
         .some((value) => String(value).toLowerCase().includes(query))
     })
 })
-const localDemoMerchants: AdminMerchantRow[] = [
-  { id: 'merchant-akouvi', ownerUserId: 'local-merchant', name: 'Akouvi Market', status: 'ACTIVE', commissionRateBps: 1500, walletProvider: 'YAS_TOGO' },
-  { id: 'merchant-kara', ownerUserId: 'local-merchant-2', name: 'Kara Fresh', status: 'PAUSED', commissionRateBps: 1200, walletProvider: 'MOOV_AFRICA' },
-  { id: 'merchant-pantry', ownerUserId: 'local-merchant-3', name: 'Togolese Pantry', status: 'PENDING_REVIEW', commissionRateBps: 1500, walletProvider: null },
-]
 const displayedMerchants = computed(() => {
-  const source = adminMerchants.value.length > 0 ? adminMerchants.value : localDemoMerchants
+  const source = adminMerchants.value
   const query = merchantSearch.value.trim().toLowerCase()
   return source.filter((merchant) => {
     if (!query) return true
@@ -514,13 +424,8 @@ const displayedMerchants = computed(() => {
   })
 })
 const selectedMerchant = computed(() => displayedMerchants.value.find((merchant) => merchant.id === selectedMerchantId.value) ?? displayedMerchants.value[0] ?? null)
-const localDemoOrders: AdminOrderRow[] = [
-  { id: 'order-local-1', customerId: 'customer-a', serviceLevel: 'EXPRESS', route: 'HOME_DELIVERY', fulfillmentPriority: 'FASTEST_AVAILABLE', customerFacingStatus: 'In transit', itemSubtotalCfa: 18400, deliveryFeeCfa: 600, totalCfa: 19000, paymentProvider: 'YAS_TOGO', paymentStatus: 'VALIDATED', orderStatus: 'ACCEPTED_FOR_FULFILLMENT' },
-  { id: 'order-local-2', customerId: 'customer-b', serviceLevel: 'CLASSIC', route: 'RELAY_POINT', fulfillmentPriority: 'LOWEST_COST', customerFacingStatus: 'Waiting for relay pickup', itemSubtotalCfa: 9800, deliveryFeeCfa: 400, totalCfa: 10200, paymentProvider: 'MOOV_AFRICA', paymentStatus: 'PENDING', orderStatus: 'ACCEPTED_FOR_FULFILLMENT' },
-  { id: 'order-local-3', customerId: 'customer-c', serviceLevel: 'CLASSIC', route: 'HOME_DELIVERY', fulfillmentPriority: 'STANDARD', customerFacingStatus: 'Delivered', itemSubtotalCfa: 26500, deliveryFeeCfa: 700, totalCfa: 27200, paymentProvider: 'YAS_TOGO', paymentStatus: 'VALIDATED', orderStatus: 'DELIVERED' },
-]
 const displayedOrders = computed(() => {
-  const source = adminOrders.value.length > 0 ? adminOrders.value : localDemoOrders
+  const source = adminOrders.value
   const query = orderSearch.value.trim().toLowerCase()
   return source.filter((order) => {
     if (!query) return true
@@ -529,39 +434,25 @@ const displayedOrders = computed(() => {
   })
 })
 const selectedOrder = computed(() => displayedOrders.value.find((order) => order.id === selectedOrderId.value) ?? displayedOrders.value[0] ?? null)
-const returnRows: ReturnRow[] = [
-  { id: 'RET-2041', orderId: 'ORD-80354', stage: 'Dropped at relay', refundStatus: 'Waiting for SEQUO receipt', requestedRefundCfa: 12500, action: 'Receive physical item', nextStep: 'Confirm product arrived at SEQUO' },
-  { id: 'RET-2038', orderId: 'ORD-80291', stage: 'Under inspection', refundStatus: 'Pending condition check', requestedRefundCfa: 38000, action: 'Review condition', nextStep: 'Record inspection decision' },
-  { id: 'RET-2031', orderId: 'ORD-80188', stage: 'Receipt verified', refundStatus: 'Refund instruction ready', requestedRefundCfa: 7900, action: 'Prepare refund instruction', nextStep: 'Send to finance team' },
-  { id: 'RET-2029', orderId: 'ORD-80120', stage: 'Problem', refundStatus: 'Blocked', requestedRefundCfa: 15400, action: 'Investigate', nextStep: 'Assign support follow-up' },
-]
-const displayedReturns = computed(() => {
-  const query = returnSearch.value.trim().toLowerCase()
-  if (!query) return returnRows
-  return returnRows.filter((item) => [item.id, item.orderId, item.stage, item.refundStatus, item.action, item.nextStep].some((value) => value.toLowerCase().includes(query)))
-})
-
 function selectSection(section: SectionId) {
   activeSection.value = section
-  if (section === 'dashboard' && isAuthenticated.value) {
-    void loadDashboard()
-  }
-  if (section === 'users' && isAuthenticated.value) {
-    void loadUsers()
-  }
-  if (section === 'merchants' && isAuthenticated.value) {
-    void loadMerchants()
-  }
-  if (section === 'orders' && isAuthenticated.value) {
-    void loadOrders()
+  if (!isAuthenticated.value) return
+  switch (section) {
+    case 'dashboard': void loadDashboard(); break
+    case 'users': void loadUsers(); break
+    case 'merchants': void loadMerchants(); break
+    case 'orders': void loadOrders(); break
+    default: void loadSection(section)
   }
 }
 
 onMounted(() => {
   accessToken.value = sessionStorage.getItem('sequo_admin_access_token') ?? ''
   refreshToken.value = sessionStorage.getItem('sequo_admin_refresh_token') ?? ''
-  if (accessToken.value) {
+  if (accessToken.value.trim()) {
     void verifySession()
+  } else if (refreshToken.value) {
+    clearSession()
   }
 })
 
@@ -576,6 +467,8 @@ async function verifySession() {
     authError.value = 'Request a phone login before continuing.'
     return
   }
+  const version = sessionVersion
+  currentUser.value = null
   authLoading.value = true
   authError.value = ''
   try {
@@ -587,13 +480,12 @@ async function verifySession() {
     }
     currentUser.value = user
     persistTokens()
-    await loadDashboard()
-    await loadUsers()
-    await loadMerchants()
-    await loadOrders()
+    selectSection(activeSection.value)
   } catch {
-    clearSession()
-    authError.value = 'We could not verify this admin session.'
+    if (version === sessionVersion) {
+      clearSession()
+      authError.value = 'We could not verify this admin session.'
+    }
   } finally {
     authLoading.value = false
   }
@@ -715,7 +607,6 @@ async function verifyEmailCode() {
     const body = (await response.json()) as AdminLoginExchangeResponse
     accessToken.value = body.accessToken
     refreshToken.value = body.refreshToken
-    currentUser.value = body.user
     persistTokens()
     resetEmailFallback()
     await verifySession()
@@ -926,7 +817,6 @@ async function exchangeApprovedPhoneLogin() {
     const body = (await response.json()) as AdminLoginExchangeResponse
     accessToken.value = body.accessToken
     refreshToken.value = body.refreshToken
-    currentUser.value = body.user
     persistTokens()
     loginStatus.value = 'CONSUMED'
     authNotice.value = ''
@@ -938,104 +828,137 @@ async function exchangeApprovedPhoneLogin() {
   }
 }
 
-async function loadOrders() {
-  ordersLoading.value = true
-  ordersError.value = ''
+async function loadRead<T>(
+  loading: Ref<boolean>,
+  error: Ref<string>,
+  read: () => Promise<T>,
+  apply: (data: T) => void,
+  reset: () => void,
+  failure: string,
+) {
+  if (!isAuthenticated.value || loading.value) return
+  const version = sessionVersion
+  loading.value = true
+  error.value = ''
   try {
-    adminOrders.value = await apiRequest<AdminOrderRow[]>('/api/admin/web/orders')
-    selectedOrderId.value = adminOrders.value[0]?.id ?? ''
+    const data = await read()
+    if (version === sessionVersion) apply(data)
   } catch {
-    adminOrders.value = []
-    selectedOrderId.value = localDemoOrders[0]?.id ?? ''
-    ordersError.value = 'Live orders are unavailable. Showing local demo tracking.'
+    if (version === sessionVersion) {
+      reset()
+      error.value = failure
+    }
   } finally {
-    ordersLoading.value = false
+    if (version === sessionVersion) loading.value = false
   }
 }
 
-async function loadMerchants() {
-  merchantsLoading.value = true
-  merchantsError.value = ''
-  try {
-    adminMerchants.value = await apiRequest<AdminMerchantRow[]>('/api/admin/web/merchants')
-    selectedMerchantId.value = adminMerchants.value[0]?.id ?? ''
-  } catch {
-    adminMerchants.value = []
-    selectedMerchantId.value = localDemoMerchants[0]?.id ?? ''
-    merchantsError.value = 'Live merchants are unavailable. Showing local demo merchants.'
-  } finally {
-    merchantsLoading.value = false
-  }
+function loadOrders() {
+  return loadRead(ordersLoading, ordersError, () => apiRequest<AdminOrderRow[]>('/api/admin/web/orders'),
+    (rows) => { adminOrders.value = rows },
+    () => { adminOrders.value = [] },
+    'Could not load orders. Refresh to try again.')
 }
 
-async function loadUsers() {
-  usersLoading.value = true
-  usersError.value = ''
-  try {
-    adminUsers.value = await apiRequest<AdminUserRow[]>('/api/admin/web/users')
-  } catch {
-    adminUsers.value = []
-    usersError.value = 'Live users are unavailable. Showing local demo accounts.'
-  } finally {
-    usersLoading.value = false
-  }
+function loadMerchants() {
+  return loadRead(merchantsLoading, merchantsError, () => apiRequest<AdminMerchantRow[]>('/api/admin/web/merchants'),
+    (rows) => { adminMerchants.value = rows },
+    () => { adminMerchants.value = [] },
+    'Could not load merchants. Refresh to try again.')
 }
 
-async function loadDashboard() {
-  dashboardLoading.value = true
-  dashboardError.value = ''
-  try {
-    const [overview, snapshot] = await Promise.all([
-      apiRequest<AdminOverview>('/api/admin/web/overview'),
-      apiRequest<AdminOperationsSnapshot>('/api/admin/monitoring/operations'),
-    ])
+function loadUsers() {
+  return loadRead(usersLoading, usersError, () => apiRequest<AdminUserRow[]>('/api/admin/web/users'),
+    (rows) => { adminUsers.value = rows },
+    () => { adminUsers.value = [] },
+    'Could not load users. Refresh to try again.')
+}
+
+function loadDashboard() {
+  return loadRead(dashboardLoading, dashboardError, () => Promise.all([
+    apiRequest<AdminOverview>('/api/admin/web/overview'),
+    apiRequest<AdminOperationsSnapshot>('/api/admin/monitoring/operations'),
+  ]),
+  ([overview, snapshot]) => {
     dashboardOverview.value = overview
     dashboardSnapshot.value = snapshot
-  } catch {
+  },
+  () => {
     dashboardOverview.value = null
     dashboardSnapshot.value = null
-    dashboardError.value = 'Live dashboard data is unavailable. Showing local demo values.'
+  },
+  'Could not load dashboard data. Refresh to try again.')
+}
+
+async function loadSection(section: AdminReadSection) {
+  const request = ++sectionRequest
+  sectionGroups.value = []
+  sectionError.value = ''
+  sectionLoading.value = true
+  try {
+    const groups = await readAdminSection(section, apiRequest)
+    if (request === sectionRequest) sectionGroups.value = groups
+  } catch {
+    if (request === sectionRequest) sectionError.value = 'Could not load this section. Refresh to try again.'
   } finally {
-    dashboardLoading.value = false
+    if (request === sectionRequest) sectionLoading.value = false
   }
 }
 
 async function apiRequest<T>(path: string, retryAfterRefresh = true): Promise<T> {
+  const version = sessionVersion
+  const token = accessToken.value
+  if (!token.trim()) throw new Error('missing_session')
   const response = await fetch(`${apiBaseUrl}${path}`, {
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${accessToken.value}`,
-    },
+    cache: 'no-store',
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
   })
-  if (response.status === 401 && retryAfterRefresh && refreshToken.value) {
-    const refreshed = await refreshSession()
+  if (version !== sessionVersion) throw new Error('session_changed')
+  if ((response.status === 401 || response.status === 403) && retryAfterRefresh && refreshToken.value) {
+    const refreshed = token !== accessToken.value || await refreshSession()
+    if (version !== sessionVersion) throw new Error('session_changed')
     if (refreshed) return apiRequest<T>(path, false)
     clearSession()
     authError.value = 'Your session ended. Please sign in again.'
+    throw new Error('session_ended')
+  }
+  if (response.status === 401 || response.status === 403) {
+    clearSession()
+    authError.value = response.status === 403
+      ? 'This account is not allowed to use SEQUO Admin.'
+      : 'Your session ended. Please sign in again.'
   }
   if (!response.ok) throw new Error('request_failed')
-  return response.json() as Promise<T>
+  const data = (await response.json()) as T
+  if (version !== sessionVersion) throw new Error('session_changed')
+  return data
 }
 
-async function refreshSession(): Promise<boolean> {
-  try {
-    const response = await fetch(`${apiBaseUrl}/api/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refreshToken: refreshToken.value, deviceId }),
-    })
-    if (!response.ok) return false
-    const tokens = (await response.json()) as AuthTokens
-    accessToken.value = tokens.accessToken
-    refreshToken.value = tokens.refreshToken
-    persistTokens()
-    return true
-  } catch {
-    return false
-  }
+function refreshSession(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight
+  const version = sessionVersion
+  const token = refreshToken.value
+  refreshInFlight = (async () => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: token, deviceId }),
+      })
+      if (!response.ok) return false
+      const tokens = (await response.json()) as AuthTokens
+      if (version !== sessionVersion) return false
+      accessToken.value = tokens.accessToken
+      refreshToken.value = tokens.refreshToken
+      persistTokens()
+      return true
+    } catch {
+      return false
+    } finally {
+      if (version === sessionVersion) refreshInFlight = null
+    }
+  })()
+  return refreshInFlight
 }
 
 async function signOut() {
@@ -1052,26 +975,6 @@ async function signOut() {
       body: JSON.stringify({ refreshToken: tokenToRevoke }),
     }).catch(() => undefined)
   }
-}
-
-function useMockLogin() {
-  email.value = email.value || 'admin@sequo.internal'
-  accessToken.value = 'local-admin-token'
-  refreshToken.value = ''
-  currentUser.value = {
-    id: 'local-admin',
-    email: email.value,
-    displayName: 'Local SEQUO Admin',
-    provider: 'LOCAL_DEV',
-    status: 'ACTIVE',
-    active: true,
-    roles: ['SUPER_ADMIN'],
-  }
-  authError.value = ''
-  void loadDashboard()
-  void loadUsers()
-  void loadMerchants()
-  void loadOrders()
 }
 
 function formatCount(value: number): string {
@@ -1091,7 +994,6 @@ function humanize(value?: string | null): string {
     RELAY_PARTNER: 'Relay partner',
     GOOGLE: 'Google',
     EMAIL: 'Email',
-    LOCAL_DEV: 'Demo',
     ACTIVE: 'Active',
     INACTIVE: 'Inactive',
     PAUSED: 'Paused',
@@ -1132,6 +1034,23 @@ function persistTokens() {
 }
 
 function clearSession() {
+  sessionVersion++
+  sectionRequest++
+  refreshInFlight = null
+  dashboardOverview.value = null
+  dashboardSnapshot.value = null
+  adminUsers.value = []
+  adminMerchants.value = []
+  adminOrders.value = []
+  selectedMerchantId.value = ''
+  selectedOrderId.value = ''
+  sectionGroups.value = []
+  for (const loading of [dashboardLoading, usersLoading, merchantsLoading, ordersLoading, sectionLoading]) {
+    loading.value = false
+  }
+  for (const error of [dashboardError, usersError, merchantsError, ordersError, sectionError]) {
+    error.value = ''
+  }
   stopLoginPolling()
   stopCountdown()
   resetEmailFallback()
@@ -1227,7 +1146,6 @@ function adminDeviceMetadata() {
             <h2>Manage daily SEQUO operations with clarity.</h2>
             <p>
               A calm control room for orders, merchants, riders, returns, relay points and finance follow-up.
-              Demo mode lets the team explore the workflow before live access is connected.
             </p>
             <div class="hero-pills" aria-label="Main admin work areas">
               <span><span class="material-symbols-rounded" aria-hidden="true">receipt_long</span> Orders</span>
@@ -1263,10 +1181,6 @@ function adminDeviceMetadata() {
               <button v-if="!emailFallbackOpen" class="secondary" type="button" @click="openEmailFallback">
                 <span class="material-symbols-rounded" aria-hidden="true">mail_lock</span>
                 I cannot access my phone
-              </button>
-              <button class="secondary" type="button" @click="useMockLogin">
-                <span class="material-symbols-rounded" aria-hidden="true">visibility</span>
-                Open demo workspace
               </button>
               <button v-if="loginRequestId" class="secondary" type="button" @click="resetPhoneLogin">
                 <span class="material-symbols-rounded" aria-hidden="true">alternate_email</span>
@@ -1335,7 +1249,7 @@ function adminDeviceMetadata() {
               <small>Apple login will be available after staff verification is ready.</small>
             </div>
             <p class="login-help">
-              Approve from an already signed-in SEQUO mobile app. Use demo mode only for training.
+              Approve from an already signed-in SEQUO mobile app.
             </p>
           </div>
         </div>
@@ -1344,7 +1258,7 @@ function adminDeviceMetadata() {
       <template v-else>
         <section class="hero-band" aria-label="Operational overview">
           <div>
-            <p class="eyebrow">Today in Lome</p>
+            <p class="eyebrow">SEQUO operations</p>
             <h2>Start with what needs attention.</h2>
             <p>{{ active.description }}</p>
           </div>
@@ -1360,7 +1274,7 @@ function adminDeviceMetadata() {
           </div>
         </section>
 
-        <section class="quick-grid" aria-label="Priority work">
+        <section v-if="dashboardCards.length && !dashboardLoading" class="quick-grid" aria-label="Priority work">
           <button
             v-for="item in priorityActions"
             :key="item.label"
@@ -1390,11 +1304,12 @@ function adminDeviceMetadata() {
               </button>
             </div>
             <p v-if="dashboardError" class="error-text">{{ dashboardError }}</p>
-            <div class="dashboard-grid" aria-label="Admin dashboard cards">
+            <p v-else-if="dashboardLoading" role="status">Loading dashboard…</p>
+            <div v-else-if="dashboardCards.length" class="dashboard-grid" aria-label="Admin dashboard cards">
               <article v-for="card in dashboardCards" :key="card.label" class="dashboard-card">
                 <div class="dashboard-card-top">
                   <span>{{ card.label }}</span>
-                  <small :class="{ demo: card.source === 'Demo data' }">{{ card.source }}</small>
+                  <small>Live data</small>
                 </div>
                 <strong>{{ card.value }}</strong>
                 <p>{{ card.detail }}</p>
@@ -1414,13 +1329,15 @@ function adminDeviceMetadata() {
               </button>
             </div>
             <p v-if="usersError" class="error-text">{{ usersError }}</p>
+            <p v-else-if="usersLoading" role="status">Loading users…</p>
+            <p v-else-if="!displayedUsers.length" role="status">No users to display.</p>
             <div class="filters">
               <input v-model="userSearch" type="search" placeholder="Search users, email, provider, role" />
               <select v-model="userRoleFilter" aria-label="Filter users by role">
                 <option v-for="role in roleOptions" :key="role" :value="role">{{ role === 'ALL' ? 'All roles' : humanize(role) }}</option>
               </select>
             </div>
-            <div class="table" role="table" aria-label="Users and roles">
+            <div v-if="!usersLoading && !usersError && displayedUsers.length" class="table" role="table" aria-label="Users and roles">
               <div class="table-row users-row table-head" role="row">
                 <span role="columnheader">User</span>
                 <span role="columnheader">Provider</span>
@@ -1451,8 +1368,10 @@ function adminDeviceMetadata() {
               </button>
             </div>
             <p v-if="merchantsError" class="error-text">{{ merchantsError }}</p>
+            <p v-else-if="merchantsLoading" role="status">Loading merchants…</p>
+            <p v-else-if="!displayedMerchants.length" role="status">No merchants to display.</p>
             <input v-model="merchantSearch" type="search" placeholder="Search merchant, owner, status, wallet" />
-            <div class="split-panel">
+            <div v-if="!merchantsLoading && !merchantsError && displayedMerchants.length" class="split-panel">
               <div class="table" role="table" aria-label="Merchant list">
                 <div class="table-row merchant-row table-head" role="row">
                   <span role="columnheader">Merchant</span>
@@ -1480,10 +1399,7 @@ function adminDeviceMetadata() {
                 <dl>
                   <div><dt>Owner</dt><dd>{{ selectedMerchant.ownerUserId || 'Not available' }}</dd></div>
                   <div><dt>Wallet</dt><dd>{{ selectedMerchant.walletProvider || 'Not configured' }}</dd></div>
-                  <div><dt>Catalog status</dt><dd>Product review tools are being prepared</dd></div>
-                  <div><dt>Product count</dt><dd>Not available yet</dd></div>
                 </dl>
-                <button type="button" disabled>Product activation is not ready yet</button>
               </aside>
             </div>
           </article>
@@ -1500,8 +1416,10 @@ function adminDeviceMetadata() {
               </button>
             </div>
             <p v-if="ordersError" class="error-text">{{ ordersError }}</p>
+            <p v-else-if="ordersLoading" role="status">Loading orders…</p>
+            <p v-else-if="!displayedOrders.length" role="status">No orders to display.</p>
             <input v-model="orderSearch" type="search" placeholder="Search order, customer, route, payment, status" />
-            <div class="split-panel">
+            <div v-if="!ordersLoading && !ordersError && displayedOrders.length" class="split-panel">
               <div class="table" role="table" aria-label="Order list">
                 <div class="table-row order-row table-head" role="row">
                   <span role="columnheader">Order</span>
@@ -1534,87 +1452,40 @@ function adminDeviceMetadata() {
                   <div><dt>Delivery</dt><dd>{{ selectedOrder.deliveryFeeCfa.toLocaleString('en-US') }} CFA</dd></div>
                   <div><dt>Provider</dt><dd>{{ humanize(selectedOrder.paymentProvider) }}</dd></div>
                 </dl>
-                <ol class="timeline">
-                  <li>Order accepted for fulfillment</li>
-                  <li>Merchant package preparation tracked</li>
-                  <li>Courier delivery tracked</li>
-                  <li>Relay fallback tracked when applicable</li>
-                </ol>
-                <button type="button" disabled>Operational changes are not ready yet</button>
               </aside>
             </div>
           </article>
 
-          <article v-else-if="active.id === 'returns'" class="panel">
+          <article v-else class="panel">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">Reverse logistics</p>
-                <h2>Returns and refunds</h2>
+                <p class="eyebrow">Read only</p>
+                <h2>{{ active.label }}</h2>
               </div>
+              <button class="secondary" type="button" :disabled="sectionLoading" @click="selectSection(active.id)">
+                <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
+                {{ sectionLoading ? 'Refreshing...' : 'Refresh' }}
+              </button>
             </div>
-            <p>Refund actions stay behind physical receipt and condition check. Cash refunds are not supported in this admin flow.</p>
-            <input v-model="returnSearch" type="search" placeholder="Search return, order, stage, refund status" />
-            <div class="table" role="table" aria-label="Returns and refunds">
-              <div class="table-row return-row table-head" role="row">
-                <span role="columnheader">Return</span>
-                <span role="columnheader">Stage</span>
-                <span role="columnheader">Refund</span>
-                <span role="columnheader">Action</span>
-              </div>
-              <div v-for="item in displayedReturns" :key="item.id" class="table-row return-row" role="row">
-                <span role="cell">
-                  <strong>{{ item.id }}</strong>
-                  <small>{{ item.orderId }} · {{ item.requestedRefundCfa.toLocaleString('en-US') }} CFA</small>
-                </span>
-                <span role="cell">{{ item.stage }}</span>
-                <span role="cell">{{ item.refundStatus }}</span>
-                <span role="cell">
-                  <strong>{{ item.action }}</strong>
-                  <small>{{ item.nextStep }}</small>
-                </span>
-              </div>
-            </div>
-          </article>
-
-          <article v-else-if="active.id === 'settings'" class="panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Business rules</p>
-                <h2>Business parameters</h2>
-              </div>
-            </div>
-            <p>These values control delivery prices, commissions, referrals, returns and relay fees. Some settings are view-only while SEQUO finishes the approval process for changes.</p>
-            <div class="settings-grid" aria-label="Business parameters">
-              <article v-for="parameter in businessParameters" :key="parameter.label" class="setting-row">
-                <div>
-                  <strong>{{ parameter.label }}</strong>
-                  <small>{{ parameter.owner }}</small>
+            <p v-if="sectionLoading" role="status">Loading {{ active.label.toLowerCase() }}…</p>
+            <p v-else-if="sectionError" class="error-text" role="alert">{{ sectionError }}</p>
+            <template v-else>
+              <section v-for="group in sectionGroups" :key="group.title" class="settings-grid">
+                <h3>{{ group.title }}</h3>
+                <p v-if="group.summary">{{ group.summary }}</p>
+                <p v-if="!group.rows.length" role="status">No records to display.</p>
+                <div v-else class="table" role="table" :aria-label="group.title">
+                  <div class="table-row table-head" role="row">
+                    <span v-for="column in group.columns" :key="column" role="columnheader">{{ column }}</span>
+                  </div>
+                  <div v-for="row in group.rows" :key="row.id" class="table-row" role="row">
+                    <span role="cell">{{ row.cells[0] }}</span>
+                    <span role="cell">{{ row.cells[1] }}</span>
+                    <span role="cell">{{ row.cells[2] }}</span>
+                  </div>
                 </div>
-                <span>{{ parameter.value }}</span>
-                <button type="button" disabled>{{ parameter.actionLabel }}</button>
-              </article>
-            </div>
-          </article>
-
-          <article v-else class="panel section-overview">
-            <div class="section-hero-icon material-symbols-rounded" aria-hidden="true">{{ active.icon }}</div>
-            <div>
-              <p class="eyebrow">{{ active.statusLabel }}</p>
-              <h2>{{ active.label }}</h2>
-              <p>{{ active.description }}</p>
-            </div>
-            <div class="table" role="table" aria-label="Section rows">
-              <div class="table-row table-head" role="row">
-                <span role="columnheader">Item</span>
-                <span role="columnheader">Meaning</span>
-                <span role="columnheader">State</span>
-              </div>
-              <div v-for="row in mockRows[active.id]" :key="row.join('-')" class="table-row" role="row">
-                <span role="cell">{{ row[0] }}</span>
-                <span role="cell">{{ row[1] }}</span>
-                <span role="cell">{{ row[2] }}</span>
-              </div>
-            </div>
+              </section>
+            </template>
           </article>
 
           <aside class="panel compact">
