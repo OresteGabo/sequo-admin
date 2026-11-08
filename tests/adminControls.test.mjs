@@ -199,3 +199,14 @@ test('merchant membership never sends a global role array or silently accepts a 
   assert.throws(() => buildAdminControlRequest('merchant-memberships', 'set-membership', { merchantId: 'm', userId: 'u', roleCode: 'ADMIN' }), /supported choice/)
   await assert.rejects(readAdminControl('merchant-memberships', { merchantId: 'm' }, async () => ({ merchantId: 'foreign', memberships: [], history: [] })), /different resource/)
 })
+
+
+test('merchant availability uses the persisted structured store contract instead of a local-only placeholder', () => {
+  const control = getAdminControl('merchant-store-settings')
+  assert.equal(control.supported, true)
+  assert.equal(control.group, 'merchants')
+  assert.deepEqual(buildAdminControlRequest(control.id, null, { merchantId: 'existing-merchant' }), {
+    path: '/api/admin/web/merchants/existing-merchant/store', method: 'GET',
+  })
+  assert.deepEqual(control.actions, [], 'Structured editor owns the nested reviewed settings write')
+})

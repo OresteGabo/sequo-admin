@@ -1,3 +1,5 @@
+import { merchantStoreControl } from './merchantStore.ts'
+
 /** Supported operator contracts only. Authentication and server role/state guards stay authoritative. */
 export type AdminControlGroup = 'users' | 'merchants' | 'catalog' | 'riders' | 'orders' | 'deliveries' | 'relay' | 'returns' | 'payments' | 'commissions' | 'negotiations' | 'cooperatives' | 'benefits' | 'notifications' | 'audit' | 'settings'
 export type AdminControlMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
@@ -114,7 +116,7 @@ export const adminControlCatalog: readonly AdminControlDescriptor[] = [
     actions: [{ id: 'set-membership', label: 'Set merchant membership', supported: true, allowedRoles: ['ADMIN', 'SUPER_ADMIN'], method: 'PUT', path: '/api/admin/web/merchant-memberships/{merchantId}/{userId}/{roleCode}', fields: [idField('merchantId', 'Merchant ID', 'path', 'merchantId'), idField('userId', 'Existing user ID'), choice('roleCode', 'Membership role', ['MERCHANT_OWNER', 'MERCHANT_STAFF'], 'path'), { name: 'active', label: 'Membership active', type: 'boolean', location: 'body', required: true, defaultValue: true }, { ...bodyText('expectedUpdatedAt', 'Current merchant access revision'), valueFrom: 'updatedAt', maxLength: 64 }, bodyText('reason', 'Membership change reason'), keyField], confirmation: 'Apply this explicit merchant membership and invalidate this account’s previous sessions? This does not grant a global role or transfer legal ownership.', readback: { controlId: 'merchant-memberships' } }],
   },
   adminRead('merchants', 'merchants', 'Merchants', '/api/admin/web/merchants', cols('name', 'status', 'commissionRateBps', 'createdAt')),
-  unavailable('merchant-store-settings', 'merchants', 'Store hours and profile changes', 'Vendor store hours and open/closed settings currently use a local repository on both mobile platforms. There is no persisted admin store-settings contract.'),
+  merchantStoreControl,
   {
     id: 'catalog-customizations', group: 'catalog', label: 'Food options and supplements', supported: true,
     description: 'Read and edit complete product choice groups with the structured editor below. Existing group and option identities, availability and price supplements are preserved.',
