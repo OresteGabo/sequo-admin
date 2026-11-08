@@ -5,6 +5,7 @@ import ConsolidationPanel from './ConsolidationPanel.vue'
 import ReturnOperationsPanel from './ReturnOperationsPanel.vue'
 import FinanceLedgerPanel from './FinanceLedgerPanel.vue'
 import PaymentInvestigationPanel from './PaymentInvestigationPanel.vue'
+import CommissionOverridePanel from './CommissionOverridePanel.vue'
 
 type SectionId =
   | 'dashboard'
@@ -182,6 +183,7 @@ type AdminOrderRow = {
 }
 
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
+const relayOperationsUrl = `${apiBaseUrl.replace(/\/$/, '')}/relay-operator.html`
 const googleWebClientId = (import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID ?? '').trim()
 const activeSection = ref<SectionId>('dashboard')
 const email = ref('')
@@ -337,7 +339,7 @@ const sections: Section[] = [
   {
     id: 'relay',
     label: 'Relay points',
-    statusLabel: 'View only',
+    statusLabel: 'Ready',
     description: 'Relay parcels, overdue packages and local counter issues.',
     icon: 'inventory_2',
   },
@@ -929,7 +931,7 @@ async function assignAvailableCourier() {
   } finally { if (version === sessionVersion) assignmentBusy.value = false }
 }
 
-async function apiRequest<T>(path: string, retryAfterRefresh = true, method: 'GET' | 'POST' = 'GET', body?: unknown): Promise<T> {
+async function apiRequest<T>(path: string, retryAfterRefresh = true, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', body?: unknown): Promise<T> {
   const version = sessionVersion
   const token = accessToken.value
   if (!token.trim()) throw new Error('missing_session')
@@ -958,7 +960,7 @@ async function apiRequest<T>(path: string, retryAfterRefresh = true, method: 'GE
     const error = await response.json().catch(() => null) as { message?: string; reason?: string } | null
     throw new Error(error?.message || error?.reason || 'request_failed')
   }
-  const data = (await response.json()) as T
+  const data = response.status === 204 ? undefined as T : (await response.json()) as T
   if (version !== sessionVersion) throw new Error('session_changed')
   return data
 }
@@ -1095,7 +1097,7 @@ function clearSession() {
   loginExpiresAt.value = ''
   sessionStorage.removeItem('sequo_admin_access_token')
   sessionStorage.removeItem('sequo_admin_refresh_token')
-  Object.keys(sessionStorage).filter((key) => key.startsWith('sequo_return_pending:')).forEach((key) => sessionStorage.removeItem(key))
+  Object.keys(sessionStorage).filter((key) => key.startsWith('sequo_return_pending:') || key.startsWith('sequo_commission_pending:')).forEach((key) => sessionStorage.removeItem(key))
 }
 
 function formatRemainingTime(remainingMs: number): string {
@@ -1490,7 +1492,7 @@ function adminDeviceMetadata() {
           <article v-else class="panel">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">{{ ['deliveries', 'returns'].includes(active.id) ? 'Operations' : 'Read only' }}</p>
+                <p class="eyebrow">{{ ['deliveries', 'returns', 'commissions', 'relay'].includes(active.id) ? 'Operations' : 'Read only' }}</p>
                 <h2>{{ active.label }}</h2>
               </div>
               <button v-if="active.id !== 'returns'" class="secondary" type="button" :disabled="sectionLoading" @click="selectSection(active.id)">
@@ -1507,6 +1509,12 @@ function adminDeviceMetadata() {
             <ConsolidationPanel v-if="active.id === 'deliveries'" :key="currentUser?.id" :request="apiRequest" />
             <ReturnOperationsPanel v-if="active.id === 'returns' && currentUser" :key="currentUser.id" :actor-id="currentUser.id" :request="apiRequest" />
             <PaymentInvestigationPanel v-if="active.id === 'payments'" :key="currentUser?.id" :request="apiRequest" />
+            <CommissionOverridePanel v-if="active.id === 'commissions' && currentUser" :key="currentUser.id" :actor-id="currentUser.id" :request="apiRequest" @changed="loadSection('commissions')" />
+            <section v-if="active.id === 'relay'" class="detail-card">
+              <h3>Relay operations</h3>
+              <p>Use the relay web module for pickup, overdue decisions and physical seller returns. Sign in there with an authorized relay or SEQUO account; the server checks access for each action.</p>
+              <a :href="relayOperationsUrl" target="_blank" rel="noopener noreferrer">Open relay operations</a>
+            </section>
             <FinanceLedgerPanel v-if="['payments', 'commissions'].includes(active.id)" :key="currentUser?.id" :request="apiRequest" />
             <p v-if="sectionLoading" role="status">Loading {{ active.label.toLowerCase() }}…</p>
             <p v-else-if="sectionError" class="error-text" role="alert">{{ sectionError }}</p>
