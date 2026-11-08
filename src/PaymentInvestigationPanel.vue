@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { readPaymentCheckout, readPaymentCheckoutQueue, reconciliationLabel, type PaymentCheckout, type PaymentInvestigation, type PaymentReadRequest } from './paymentInvestigationReads'
-const props = defineProps<{ request: PaymentReadRequest }>()
+const props = defineProps<{ request: PaymentReadRequest; initialCheckoutId?: string }>()
 const rows = ref<PaymentCheckout[]>([])
 const queueBusy = ref(false)
 const queueError = ref('')
@@ -33,7 +33,7 @@ async function lookup(id = lookupId.value) {
   catch (caught) { if (!disposed && version === generation) detailError.value = message(caught) }
   finally { if (!disposed && version === generation) detailBusy.value = false }
 }
-onMounted(refreshQueue)
+onMounted(async () => { await refreshQueue(); if (props.initialCheckoutId) await lookup(props.initialCheckoutId) })
 </script>
 
 <template>

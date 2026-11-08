@@ -14,7 +14,7 @@ type Manifest = {
   sellerPackages: { subOrderId: string; merchantId: string; packageCount: number; ready: boolean; collected: boolean }[]
 }
 type PendingAction = { description: string; submit: () => Promise<void>; applied: () => boolean; acknowledged: boolean }
-const props = defineProps<{ request: Request }>()
+const props = defineProps<{ request: Request; initialManifestId?: string }>()
 const cooperatives = ref<Cooperative[]>([])
 const manifests = ref<Manifest[]>([])
 const selected = ref<Manifest | null>(null)
@@ -149,7 +149,7 @@ async function dispatch() {
     await post(`/api/consolidations/${encoded(id)}/dispatch-final-package`, body)
   }, () => group(id)?.status === 'Dispatched')
 }
-onMounted(() => { void run(refresh) })
+onMounted(() => { void run(async () => { await refresh(); if (props.initialManifestId) selectManifest(group(props.initialManifestId) ?? null) }) })
 </script>
 
 <template>

@@ -315,6 +315,10 @@ const server = http.createServer(async (req, res) => {
       ),
       "Compact workspace does not overflow",
     );
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".sidebar")?.getBoundingClientRect().right <= 1,
+    );
     assert.ok(
       await page.$eval(
         ".sidebar",

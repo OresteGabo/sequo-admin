@@ -16,7 +16,7 @@ type ReturnRecord = {
   refundDeadlineState?: string; refundDueAt?: string | null; refundInstructionState?: string | null; history?: History[]
 }
 type Intent = { returnId: string; action: Action; body: Record<string, string | number>; acknowledged: boolean }
-const props = defineProps<{ request: Request; actorId: string }>()
+const props = defineProps<{ request: Request; actorId: string; initialReturnId?: string }>()
 const storageKey = `sequo_return_pending:${props.actorId}`
 const statuses = ['Requested', 'AwaitingRelayDropoff', 'DroppedAtRelay', 'CollectedBySequo', 'ReceivedBySequo', 'RefundPending', 'Rejected']
 const filter = ref('ALL')
@@ -131,7 +131,7 @@ function revise() {
   if (!mayRevise.value || stale.value || busy.value) return
   saveIntent(null); mayRevise.value = false; notice.value = 'Review the refreshed return before submitting a revised action.'
 }
-onMounted(() => { void run(() => readback(pending.value?.returnId)) })
+onMounted(() => { void run(() => readback(pending.value?.returnId ?? props.initialReturnId)) })
 </script>
 
 <template>

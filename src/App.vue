@@ -20,6 +20,7 @@ import PaymentInvestigationPanel from "./PaymentInvestigationPanel.vue";
 import CommissionOverridePanel from "./CommissionOverridePanel.vue";
 import AdminIcon from "./AdminIcon.vue";
 import OperationsControlPanel from "./OperationsControlPanel.vue";
+import LocalFixtureGuide from "./LocalFixtureGuide.vue";
 
 type SectionId =
   | "dashboard"
@@ -216,7 +217,11 @@ const releaseEnvironmentLabel =
     : releaseEnvironment === "STAGING"
       ? "Staging"
       : releaseEnvironment;
-const relayOperationsUrl = `${apiBaseUrl.replace(/\/$/, "")}/relay-operator.html`;
+const relayOperationsUrl = computed(() =>
+  localDevelopmentPage && developmentAccess.value
+    ? "/relay-operator.html?session=local-admin"
+    : `${apiBaseUrl.replace(/\/$/, "")}/relay-operator.html`,
+);
 const googleWebClientId = (
   import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID ?? ""
 ).trim();
@@ -271,6 +276,10 @@ const sectionLoading = ref(false);
 const sectionError = ref("");
 const sectionGroups = ref<AdminReadGroup[]>([]);
 const assignmentMissionId = ref("");
+const localFixtureTarget = ref<{
+  category: SectionId;
+  ids: Record<string, string>;
+} | null>(null);
 let sectionRequest = 0;
 let sessionVersion = 0;
 let refreshInFlight: Promise<boolean> | null = null;
@@ -662,6 +671,8 @@ const selectedOrder = computed(
     null,
 );
 function selectSection(section: SectionId, updateLocation = true) {
+  if (localFixtureTarget.value?.category !== section)
+    localFixtureTarget.value = null;
   activeSection.value = section;
   mobileNavOpen.value = false;
   if (updateLocation && window.location.hash !== `#${section}`)
@@ -699,6 +710,7 @@ onMounted(() => {
   onWorkspaceLocation();
   window.addEventListener("keydown", onWorkspaceKeydown);
   window.addEventListener("popstate", onWorkspaceLocation);
+  window.addEventListener("pageshow", onWorkspacePageShow);
   workspacePollTimer = window.setInterval(() => {
     if (
       autoRefresh.value &&
@@ -722,6 +734,7 @@ onUnmounted(() => {
   if (workspacePollTimer) window.clearInterval(workspacePollTimer);
   window.removeEventListener("keydown", onWorkspaceKeydown);
   window.removeEventListener("popstate", onWorkspaceLocation);
+  window.removeEventListener("pageshow", onWorkspacePageShow);
   stopLoginPolling();
   stopCountdown();
   stopEmailCodeTimer();
@@ -1457,6 +1470,7 @@ function persistTokens() {
 
 function clearSession() {
   sessionVersion++;
+  localFixtureTarget.value = null;
   commandOpen.value = false;
   mobileNavOpen.value = false;
   lastUpdatedAt.value = "";
@@ -1745,6 +1759,38 @@ async function openService(
     block: "start",
   });
 }
+async function openLocalFixtureScenario(
+  category: SectionId,
+  ids: Record<string, string>,
+) {
+  if (
+    !localDevelopmentPage ||
+    !developmentAccess.value ||
+    !isAuthenticated.value
+  )
+    return;
+  const section = ids.manifestId ? "deliveries" : category;
+  localFixtureTarget.value = { category: section, ids };
+  selectSection(section);
+  await nextTick();
+  if (
+    (category === "returns" && ids.returnId) ||
+    (category === "payments" && ids.checkoutId) ||
+    ids.manifestId
+  )
+    return;
+  const controls: Partial<Record<SectionId, string>> = {
+    users: "user-access-management",
+    merchants: "merchant-store-settings",
+    catalog: "catalog-customizations",
+    orders: "order-detail",
+    riders: "courier-detail",
+    relay: ids.parcelId ? "relay-parcel-detail" : "relay-site-detail",
+    deliveries: "delivery-mission-detail",
+  };
+  const control = controls[section];
+  if (control) await serviceControls.value?.openControl(control, ids);
+}
 function openOrder(order: AdminOrderRow) {
   selectedOrderId.value = order.id;
   void openService("orders", "order-detail", { orderId: order.id });
@@ -1879,6 +1925,9 @@ function onWorkspaceKeydown(event: KeyboardEvent) {
     commandOpen.value = false;
     mobileNavOpen.value = false;
   }
+}
+function onWorkspacePageShow(event: PageTransitionEvent) {
+  if (event.persisted) window.location.reload();
 }
 function onWorkspaceLocation() {
   const id = window.location.hash.slice(1).split("/")[0] as SectionId;
@@ -2521,6 +2570,12 @@ function onWorkspaceLocation() {
               </table>
             </div>
           </section>
+          <LocalFixtureGuide
+            v-if="localDevelopmentPage && developmentAccess && currentUser"
+            :actor-id="currentUser.id"
+            :request="apiRequest"
+            @navigate="openLocalFixtureScenario"
+          />
           <div class="overview-footer">
             <span
               ><span class="status-dot" />{{
@@ -2871,17 +2926,20 @@ function onWorkspaceLocation() {
               </button>
             </form>
             <ConsolidationPanel
+              :initial-manifest-id="localFixtureTarget?.ids.manifestId"
               v-if="active.id === 'deliveries'"
               :key="currentUser?.id"
               :request="apiRequest"
             />
             <ReturnOperationsPanel
+              :initial-return-id="localFixtureTarget?.ids.returnId"
               v-if="active.id === 'returns' && currentUser"
               :key="currentUser.id"
               :actor-id="currentUser.id"
               :request="apiRequest"
             />
             <PaymentInvestigationPanel
+              :initial-checkout-id="localFixtureTarget?.ids.checkoutId"
               v-if="active.id === 'payments'"
               :key="currentUser?.id"
               :request="apiRequest"
@@ -2895,14 +2953,22 @@ function onWorkspaceLocation() {
             />
             <section v-if="active.id === 'relay'" class="detail-card">
               <h3>Relay operations</h3>
-              <p>
+              <p v-if="localDevelopmentPage && developmentAccess">
+                The local relay tool uses your verified development session.
+                Pickup and return test values are in the practice guide.
+              </p>
+              <p v-else>
                 Use the relay web module for pickup, overdue decisions and
                 physical seller returns. Sign in there with an authorized relay
                 or SEQUO account; the server checks access for each action.
               </p>
               <a
                 :href="relayOperationsUrl"
-                target="_blank"
+                :target="
+                  localDevelopmentPage && developmentAccess
+                    ? undefined
+                    : '_blank'
+                "
                 rel="noopener noreferrer"
                 >Open relay operations</a
               >
