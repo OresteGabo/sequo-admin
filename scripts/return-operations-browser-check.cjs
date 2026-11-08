@@ -4,8 +4,10 @@ const http = require('node:http');
 const assert = require('node:assert/strict');
 const puppeteer = require('puppeteer-core');
 const now = '2026-11-08T12:00:00Z';
-const makeReturn = (id, status) => ({id,orderId:`order-${id}`,customerId:'customer-fixture',status,reason:'Wrong size fixture',requestedAt:now,requestedRefundCfa:3000,relayPointId:'relay-fixture',droppedAt:now,receivedBySequoAt:status==='ReceivedBySequo'?now:null,receivingOperatorId:status==='ReceivedBySequo'?'legacy-operator':null,conditionAssessment:status==='ReceivedBySequo'?'Legacy receipt; inspection pending':null,responsibility:null,refundAmountCfa:null,updatedAt:now,collectedBySequoAt:null,collectingOperatorId:null,inspectionDecision:null,inspectedAt:null,inspectingOperatorId:null,refundInstruction:null,refundDeadlineState:'UNCONFIGURED',refundDueAt:null,history:[]});
-const returns = [makeReturn('return-fixture','DroppedAtRelay'),makeReturn('return-legacy','ReceivedBySequo')];
+const makeReturn = (id, status) => ({id,orderId:`order-${id}`,customerId:'customer-fixture',status,reason:'Wrong size fixture',requestedAt:now,requestedRefundCfa:3000,relayPointId:'relay-fixture',droppedAt:now,receivedBySequoAt:status==='ReceivedBySequo'?now:null,receivingOperatorId:status==='ReceivedBySequo'?'legacy-operator':null,conditionAssessment:status==='ReceivedBySequo'?'Legacy receipt; inspection pending':null,responsibility:null,refundAmountCfa:null,updatedAt:now,collectedBySequoAt:null,collectingOperatorId:null,inspectionDecision:null,inspectedAt:null,inspectingOperatorId:null,refundInstruction:null,refundInstructionState:'NOT_INSTRUCTED',refundDeadlineState:'UNCONFIGURED',refundDueAt:null,history:[]});
+const returns = [makeReturn('return-fixture','DroppedAtRelay'),makeReturn('return-legacy','ReceivedBySequo'),
+  {...makeReturn('legacy-requested-key','Requested'),refundInstructionState:'LEGACY_REVIEW_REQUIRED'},
+  {...makeReturn('legacy-received-key','ReceivedBySequo'),refundInstructionState:'LEGACY_REVIEW_REQUIRED',inspectionDecision:'ACCEPTED',conditionAssessment:'Accepted fixture inspection',responsibility:'Merchant'}];
 let expired = false; let challengeCollection = true; let failReceiptReadback = false; let failRefundResponse = true; let refundInstructions = 0; let returnReads = 0;
 const bodies = {collection:[],receipt:[],refund:[]};
 const keys = new Map();
@@ -48,7 +50,7 @@ const server = http.createServer(async(req,res)=>{
         } else if(action==='inspection') {
           assert.equal(record.status,'ReceivedBySequo');assert.ok(body.conditionAssessment);record.inspectionDecision=body.decision;record.inspectedAt=now;record.inspectingOperatorId='admin-fixture';record.conditionAssessment=body.conditionAssessment;record.responsibility=body.responsibility;if(body.decision==='REJECTED')record.status='Rejected';addHistory(record,'CONDITION_'+body.decision,body.conditionAssessment);
         } else if(action==='refund') {
-          assert.equal(record.inspectionDecision,'ACCEPTED');assert.equal(body.amountCfa,2500);assert.equal(body.reason,undefined);record.status='RefundPending';record.refundAmountCfa=body.amountCfa;record.refundInstruction={id:'refund-instruction-fixture',amountCfa:body.amountCfa,currency:'XOF',requestedAt:now,requestedByUserId:'admin-fixture',status:'REQUESTED',paymentStatus:'NOT_SUBMITTED'};refundInstructions++;addHistory(record,'REFUND_INSTRUCTION','Instruction saved; provider not submitted');
+          assert.equal(record.inspectionDecision,'ACCEPTED');assert.equal(body.amountCfa,2500);assert.equal(body.reason,undefined);record.status='RefundPending';record.refundAmountCfa=body.amountCfa;record.refundInstructionState='REQUESTED';record.refundInstruction={id:'refund-instruction-fixture',amountCfa:body.amountCfa,currency:'XOF',requestedAt:now,requestedByUserId:'admin-fixture',status:'REQUESTED',paymentStatus:'NOT_SUBMITTED'};refundInstructions++;addHistory(record,'REFUND_INSTRUCTION','Instruction saved; provider not submitted');
           if(failRefundResponse){failRefundResponse=false;res.statusCode=503;res.end(JSON.stringify({message:'Fixture response lost after save'}));return;}
         } else assert.fail('Unexpected return action '+action);
         result=record;
@@ -91,7 +93,16 @@ const server = http.createServer(async(req,res)=>{
     assert.ok(await page.$eval('.return-operations',node=>node.textContent.includes('Not submitted')));assert.equal(await disabled('Record refund instruction'),true);
     await page.screenshot({path:'/tmp/sequo-task20-admin.png',fullPage:true});
     await open('return-legacy');await field('Condition inspection decision','REJECTED');await field('Condition inspection assessment','Damaged fixture packaging');await field('Inspected responsibility','Courier');await click('Record condition decision');await page.waitForFunction(()=>document.querySelector('.return-card h4')?.textContent.includes('Rejected'));await waitIdle();assert.equal(await disabled('Record refund instruction'),true);assert.equal(returns[1].collectedBySequoAt,null);
-    await field('Return queue','Requested');await page.$eval('.return-operations select',node=>node.dispatchEvent(new Event('change',{bubbles:true})));await waitIdle();assert.ok(await page.$eval('.return-operations',node=>node.textContent.includes('No returns in this queue.')));
+    for (const id of ['legacy-requested-key','legacy-received-key']) {
+      await open(id);assert.ok(await page.$eval('.return-operations',node=>node.textContent.includes('Legacy refund requires operator review.')));
+      assert.equal(await disabled('Record refund instruction'),true);
+    }
+    await page.evaluate(()=>sessionStorage.setItem('sequo_return_pending:admin-fixture',JSON.stringify({returnId:'legacy-received-key',action:'refund',body:{amountCfa:2500,idempotencyKey:'legacy-frozen-intent-key'},acknowledged:true})));
+    await page.reload();await page.waitForSelector('.nav-button strong');await page.evaluate(navigateReturns);await page.waitForFunction(()=>document.querySelector('.return-card h4')?.textContent.includes('legacy-received-key'));await waitIdle();
+    const legacyIntent=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('sequo_return_pending:admin-fixture')));assert.equal(legacyIntent.body.idempotencyKey,'legacy-frozen-intent-key');assert.equal(legacyIntent.body.amountCfa,2500);
+    assert.equal(refundInstructions,1);assert.equal(bodies.refund.length,1);await click('Revise after server refresh');assert.equal(await disabled('Record refund instruction'),true);
+    await (await page.$('.return-operations')).screenshot({path:'/tmp/sequo-task26-admin-refund.png'});
+    await field('Return queue','AwaitingRelayDropoff');await page.$eval('.return-operations select',node=>node.dispatchEvent(new Event('change',{bubbles:true})));await waitIdle();assert.ok(await page.$eval('.return-operations',node=>node.textContent.includes('No returns in this queue.')));
     expired=true;await click('Refresh returns');await page.waitForFunction(()=>!document.querySelector('.return-operations'));assert.equal(await page.evaluate(()=>Object.keys(sessionStorage).some(key=>key.startsWith('sequo_return_pending:'))),false);
     expired=false;
     for(const token of ['nonadmin-fixture',null]){
@@ -102,6 +113,6 @@ const server = http.createServer(async(req,res)=>{
       assert.equal(await another.$('.return-operations'),null);assert.equal(returnReads,before);await another.close();
     }
     assert.deepEqual(errors,[]);
-    console.log('PASS: authenticated queues/detail, collection auth-refresh retry, receipt readback failure/frozen retry, explicit accepted/rejected inspection including legacy receipt, cleared notes between returns, one refund instruction recovered after reload, provider-not-submitted state, unconfigured deadline, empty queue and expired/missing/non-admin fail-closed sessions. Mock HTTP only.');
+    console.log('PASS: authenticated queues/detail, collection auth-refresh retry, receipt readback failure/frozen retry, explicit accepted/rejected inspection including legacy receipt, cleared notes between returns, one refund instruction recovered after reload, provider-not-submitted state, Requested/Received legacy-key review without another instruction, frozen legacy retry retained, unconfigured deadline, empty queue and expired/missing/non-admin fail-closed sessions. Mock HTTP only.');
   } finally {await browser.close();server.close();}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1;});
