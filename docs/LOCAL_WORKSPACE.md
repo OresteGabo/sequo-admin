@@ -67,6 +67,8 @@ The floating Vue developer toolbar is off by default so the development workspac
 
 ## Optional operational practice data
 
+See the [practice guide](LOCAL_PRACTICE_DATA.md) for the installed records, first actions and verification evidence.
+
 Start the workspace normally, then populate its **existing retained database** from another terminal in sequo-admin:
 
 ```sh

@@ -1,0 +1,25 @@
+{
+  "environment": "ISOLATED_LOCAL_POSTGRESQL",
+  "counts": {
+    "testAccounts": 15,
+    "scenarios": 26,
+    "orders": 19,
+    "riders": 4,
+    "relaySites": 2,
+    "returns": 7,
+    "groupings": 2,
+    "relayParcels": 3
+  },
+  "providerPayments": "DISCONNECTED",
+  "refunds": "INSTRUCTIONS_ONLY_NOT_SUBMITTED",
+  "repeatSeed": "SAME_MANIFEST_AND_RECORD_COUNTS",
+  "parcelStates": [
+    "Delayed",
+    "Deposited",
+    "ReturnToSellerReview"
+  ],
+  "returnWorkflowCounts": {
+    "awaitingHandoff": 4,
+    "awaitingInspection": 1
+  }
+}
