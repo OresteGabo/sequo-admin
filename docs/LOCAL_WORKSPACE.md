@@ -62,3 +62,5 @@ Flyway migrates the dedicated database before fixture seeding. Only a new synthe
 Providers remain disconnected. Notification/relay/settlement workers are disabled; referral awards and unapproved delivery mode offers remain disabled. Pending checkout, refund instruction, recorded earnings and real provider transfers remain distinct. No local launch proves external OTP, camera/device, locker, GPS, wallet or bank integration.
 
 Startup diagnostics are in private `.local-workspace/{api-build,database-start,api,fixture-seed,web}.log`. A failed build may need `--online`; a failed Docker start needs the local engine. Read logs locally and redact credentials/identity/session values before sharing. The launcher never prints generated passwords, signing keys or session tokens.
+
+The floating Vue developer toolbar is off by default so the development workspace matches the product layout. For ordinary frontend debugging outside the isolated launcher, opt in with `SEQUO_ADMIN_DEVTOOLS=true npm run dev`. This does not enable development authentication on another API.

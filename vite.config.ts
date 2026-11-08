@@ -8,7 +8,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 export default defineConfig({
   plugins: [
     vue(),
-    vueDevTools(),
+    ...(process.env.SEQUO_ADMIN_DEVTOOLS === 'true' ? [vueDevTools()] : []),
   ],
   resolve: {
     alias: {
