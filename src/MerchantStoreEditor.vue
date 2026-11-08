@@ -112,4 +112,5 @@ watch(() => [props.merchantId, props.actorId], () => {
 
 <style scoped>
 .merchant-store-editor { margin-top: 1rem; }.editor-heading { display:flex;justify-content:space-between;gap:1rem;align-items:start; }.store-readback,.merchant-store-editor form { display:grid;gap:.7rem; }.store-readback { margin-block:1rem; }fieldset { border:1px solid var(--border-color,#d3d8df);padding:1rem;display:grid;gap:.7rem; }label { display:grid;gap:.35rem; }label:has(input[type=checkbox]) { display:flex;align-items:center;gap:.5rem; }.weekly-hours>div,.exception-row { display:flex;flex-wrap:wrap;gap:.7rem;align-items:end;padding-block:.5rem; }.change-preview { border:1px solid var(--border-color,#d3d8df);padding:1rem;margin-top:1rem;display:grid;gap:.7rem; }input,select,textarea { max-width:100%; }button { width:fit-content; }
+input[type="checkbox"] { width:16px; height:16px; min-height:16px; accent-color:var(--green); flex:0 0 auto; }
 </style>
