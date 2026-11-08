@@ -35,6 +35,8 @@ const snapshot = {
     returnsWaitingRelayAction: 1,
     returnsWaitingSequoCollection: 2,
     returnsInProblem: 0,
+    returnsAwaitingHandoff: 4,
+    returnsAwaitingInspection: 1,
   },
   payoutQueue: { merchantPayoutCandidates: 2 },
 };
@@ -224,6 +226,17 @@ const server = http.createServer(async (req, res) => {
       () =>
         document.querySelector(".metric-card > strong")?.textContent === "148",
     );
+    const dashboardQueues = await page.evaluate(() => ({
+      handoff: [...document.querySelectorAll(".metric-card")]
+        .find(card => card.querySelector(".metric-label")?.textContent.includes("Returns awaiting handoff"))
+        ?.querySelector("strong")?.textContent,
+      attention: Object.fromEntries([...document.querySelectorAll(".attention-item")]
+        .map(item => [item.querySelector("strong")?.textContent, item.querySelector("b")?.textContent])),
+    }));
+    assert.equal(dashboardQueues.handoff, "4", "Actual return requests are not replaced by or added to legacy parcel counts");
+    assert.equal(dashboardQueues.attention["Returns to review"], "1", "Inspection has its own persisted queue");
+    assert.equal(dashboardQueues.attention["Merchant payouts"], "2", "Finance count is explicitly limited to merchant payouts");
+    assert.equal(dashboardQueues.attention["Payment follow-up"], undefined);
     await page.keyboard.down("Control");
     await page.keyboard.press("k");
     await page.keyboard.up("Control");
@@ -378,7 +391,7 @@ const server = http.createServer(async (req, res) => {
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: sign-in isolation, production dev-entry exclusion, non-admin denial, real fixture counts, keyboard search, confirmation cancellation/focus trap, exact revision/key retry across reload, one recorded operation, completed-tap lock, mobile navigation/width, scoped403 and expired-session clearing. Local HTTP fixtures only.",
+      "PASS: sign-in isolation, production dev-entry exclusion, non-admin denial, real fixture counts, distinct return handoff/inspection queues and explicit merchant payout metric, keyboard search, confirmation cancellation/focus trap, exact revision/key retry across reload, one recorded operation, completed-tap lock, mobile navigation/width, scoped403 and expired-session clearing. Local HTTP fixtures only.",
     );
   } finally {
     await browser.close();

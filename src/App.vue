@@ -157,6 +157,8 @@ type AdminOperationsSnapshot = {
     returnsWaitingRelayAction?: number;
     returnsWaitingSequoCollection?: number;
     returnsInProblem?: number;
+    returnsAwaitingHandoff?: number;
+    returnsAwaitingInspection?: number;
   };
 };
 
@@ -513,15 +515,15 @@ const priorityActions = computed(() => [
   },
   {
     label: "Returns to review",
-    value: dashboardCards.value[4]?.value ?? "—",
-    detail: "Check inspection queue",
+    value: formatKnownCount(dashboardSnapshot.value?.returnBottlenecks?.returnsAwaitingInspection),
+    detail: "Received packages awaiting an inspection decision",
     target: "returns" as SectionId,
     icon: "assignment_return",
   },
   {
-    label: "Payment follow-up",
+    label: "Merchant payouts",
     value: dashboardCards.value[5]?.value ?? "—",
-    detail: "Review finance queue",
+    detail: "Accrued, eligible, or failed merchant payout records",
     target: "payments" as SectionId,
     icon: "account_balance_wallet",
   },
@@ -567,16 +569,13 @@ const dashboardCards = computed<DashboardCard[]>(() => {
     },
     {
       label: "Returns awaiting handoff",
-      value: formatKnownSum(
-        snapshot?.returnBottlenecks?.returnsWaitingRelayAction,
-        snapshot?.returnBottlenecks?.returnsWaitingSequoCollection,
-      ),
-      detail: `${formatKnownCount(snapshot?.returnBottlenecks?.returnsInProblem)} return problems`,
+      value: formatKnownCount(snapshot?.returnBottlenecks?.returnsAwaitingHandoff),
+      detail: "Awaiting customer drop-off, SEQUO collection, or physical receipt",
     },
     {
-      label: "Payment / settlement issues",
+      label: "Merchant payouts",
       value: formatKnownCount(snapshot?.payoutQueue?.merchantPayoutCandidates),
-      detail: "Merchant payouts needing finance attention",
+      detail: "Accrued, eligible, or failed merchant payout records",
     },
     {
       label: "Courier availability issues",
