@@ -4,6 +4,7 @@ import { readAdminSection, type AdminReadGroup, type AdminReadSection } from './
 import ConsolidationPanel from './ConsolidationPanel.vue'
 import ReturnOperationsPanel from './ReturnOperationsPanel.vue'
 import FinanceLedgerPanel from './FinanceLedgerPanel.vue'
+import PaymentInvestigationPanel from './PaymentInvestigationPanel.vue'
 
 type SectionId =
   | 'dashboard'
@@ -316,7 +317,7 @@ const sections: Section[] = [
     id: 'payments',
     label: 'Payments',
     statusLabel: 'View only',
-    description: 'Merchant payouts and payment events that need finance attention.',
+    description: 'Pending checkouts, callback outcomes and merchant settlement records.',
     icon: 'payments',
   },
   {
@@ -1505,6 +1506,7 @@ function adminDeviceMetadata() {
             </form>
             <ConsolidationPanel v-if="active.id === 'deliveries'" :key="currentUser?.id" :request="apiRequest" />
             <ReturnOperationsPanel v-if="active.id === 'returns' && currentUser" :key="currentUser.id" :actor-id="currentUser.id" :request="apiRequest" />
+            <PaymentInvestigationPanel v-if="active.id === 'payments'" :key="currentUser?.id" :request="apiRequest" />
             <FinanceLedgerPanel v-if="['payments', 'commissions'].includes(active.id)" :key="currentUser?.id" :request="apiRequest" />
             <p v-if="sectionLoading" role="status">Loading {{ active.label.toLowerCase() }}…</p>
             <p v-else-if="sectionError" class="error-text" role="alert">{{ sectionError }}</p>

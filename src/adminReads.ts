@@ -1,3 +1,4 @@
+import { reconciliationLabel } from './paymentInvestigationReads.ts'
 export type AdminReadSection = 'deliveries' | 'payments' | 'commissions' | 'returns' | 'relay' | 'settings'
 
 export type AdminReadGroup = {
@@ -28,7 +29,7 @@ type Payments = {
   }[]
   webhookEvents: {
     id: string; provider: string; eventId: string; checkoutId: string
-    amountCfa: number; status: string; receivedAt: string
+    amountCfa: number; status: string; receivedAt: string; reconciliationStatus?: string | null
   }[]
 }
 type Commissions = {
@@ -122,13 +123,13 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
           ],
         })),
       }, {
-        title: 'Payment events', columns: ['Provider / event', 'Checkout / amount', 'Status / received'],
+        title: 'Payment events', summary: 'Received normalized callback statuses. Investigate the checkout to verify reconciliation; receipt alone does not confirm fulfillment.', columns: ['Provider / event', 'Checkout / amount', 'Status / received'],
         rows: data.webhookEvents.map((event) => ({
           id: event.id,
           cells: [
             `${label(event.provider)} · ${event.eventId}`,
             `${event.checkoutId} · ${money(event.amountCfa)}`,
-            `${label(event.status)} · ${timestamp(event.receivedAt)}`,
+            `${label(event.status)} · ${reconciliationLabel(event.reconciliationStatus)} · ${timestamp(event.receivedAt)}`,
           ],
         })),
       }]
