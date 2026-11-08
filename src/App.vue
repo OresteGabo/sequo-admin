@@ -21,6 +21,9 @@ import CommissionOverridePanel from "./CommissionOverridePanel.vue";
 import AdminIcon from "./AdminIcon.vue";
 import OperationsControlPanel from "./OperationsControlPanel.vue";
 import LocalFixtureGuide from "./LocalFixtureGuide.vue";
+import AdminProductMediaPanel from "./AdminProductMediaPanel.vue";
+import AdminEnrollmentPanel from "./AdminEnrollmentPanel.vue";
+import RelayAdministrationPanel from "./RelayAdministrationPanel.vue";
 
 type SectionId =
   | "dashboard"
@@ -1298,6 +1301,7 @@ async function apiRequest<T>(
 ): Promise<T> {
   const version = sessionVersion;
   const token = accessToken.value;
+  const multipart = body instanceof FormData;
   if (!token.trim()) throw new Error("missing_session");
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method,
@@ -1305,9 +1309,9 @@ async function apiRequest<T>(
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${token}`,
-      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...(body === undefined || multipart ? {} : { "Content-Type": "application/json" }),
     },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined ? {} : { body: multipart ? body as FormData : JSON.stringify(body) }),
   });
   if (version !== sessionVersion) throw new Error("session_changed");
   if (response.status === 401 && retryAfterRefresh && refreshToken.value) {
@@ -1523,7 +1527,9 @@ function clearSession() {
         key.startsWith("sequo_commission_pending:") ||
         key.startsWith("sequo_admin_control_pending:") ||
         key.startsWith("sequo_catalog_options_pending:") ||
-        key.startsWith("sequo_store_pending:"),
+        key.startsWith("sequo_store_pending:") ||
+        key.startsWith("sequo_admin_enrollment_pending:") ||
+        key.startsWith("sequo_relay_admin_pending:"),
     )
     .forEach((key) => sessionStorage.removeItem(key));
 }
@@ -3021,6 +3027,29 @@ function onWorkspaceLocation() {
             </template>
           </article>
 
+          <AdminEnrollmentPanel
+            v-if="currentUser && (active.id === 'merchants' || active.id === 'riders')"
+            :key="`${currentUser.id}:${active.id}`"
+            :kind="active.id === 'merchants' ? 'merchant' : 'courier'"
+            :request="apiRequest"
+            :actor-id="currentUser.id"
+            @changed="onControlChanged"
+          />
+          <AdminProductMediaPanel
+            v-if="currentUser && active.id === 'catalog'"
+            :key="currentUser.id"
+            :request="apiRequest"
+            :actor-id="currentUser.id"
+            :initial-product-id="localFixtureTarget?.ids.productId"
+            @changed="onControlChanged"
+          />
+          <RelayAdministrationPanel
+            v-if="currentUser && active.id === 'relay'"
+            :key="currentUser.id"
+            :request="apiRequest"
+            :actor-id="currentUser.id"
+            @changed="onControlChanged"
+          />
           <OperationsControlPanel
             ref="serviceControls"
             :key="`${currentUser?.id}:${activeSection}`"
