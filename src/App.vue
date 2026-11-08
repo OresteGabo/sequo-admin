@@ -271,9 +271,6 @@ const sectionLoading = ref(false);
 const sectionError = ref("");
 const sectionGroups = ref<AdminReadGroup[]>([]);
 const assignmentMissionId = ref("");
-const assignmentBusy = ref(false);
-const assignmentError = ref("");
-const assignmentMessage = ref("");
 let sectionRequest = 0;
 let sessionVersion = 0;
 let refreshInFlight: Promise<boolean> | null = null;
@@ -1267,36 +1264,18 @@ async function loadSection(section: AdminReadSection) {
   }
 }
 
-async function assignAvailableCourier() {
+async function preparePolicyAssignment() {
   const missionId = assignmentMissionId.value.trim();
-  if (
-    assignmentBusy.value ||
-    !isAuthenticated.value ||
-    !missionId ||
-    missionId.length > 128
-  )
-    return;
-  const version = sessionVersion;
-  assignmentBusy.value = true;
-  assignmentError.value = "";
-  assignmentMessage.value = "";
-  try {
-    await apiRequest(
-      `/api/delivery/missions/${encodeURIComponent(missionId)}/assign-policy`,
-      true,
-      "POST",
-    );
-    if (version !== sessionVersion) return;
-    assignmentMessage.value =
-      "Assignment saved. Existing assignments are retained on retry.";
-    await loadSection("deliveries");
-  } catch {
-    if (version === sessionVersion)
-      assignmentError.value =
-        "Assignment was not confirmed. Refresh and check courier availability, workforce and capacity before retrying.";
-  } finally {
-    if (version === sessionVersion) assignmentBusy.value = false;
-  }
+  if (!isAuthenticated.value || !missionId || missionId.length > 128) return;
+  await serviceControls.value?.openAction(
+    "delivery-missions",
+    "assign-policy",
+    { missionId },
+  );
+  serviceControls.value?.$el?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
 }
 
 async function apiRequest<T>(
@@ -1492,9 +1471,6 @@ function clearSession() {
   selectedOrderId.value = "";
   sectionGroups.value = [];
   assignmentMissionId.value = "";
-  assignmentBusy.value = false;
-  assignmentError.value = "";
-  assignmentMessage.value = "";
   for (const loading of [
     dashboardLoading,
     usersLoading,
@@ -2837,9 +2813,7 @@ function onWorkspaceLocation() {
                   <div>
                     <dt>Delivery</dt>
                     <dd>
-                      {{
-                        selectedOrder.deliveryFeeCfa.toLocaleString("en-US")
-                      }}
+                      {{ selectedOrder.deliveryFeeCfa.toLocaleString("en-US") }}
                       CFA
                     </dd>
                   </div>
@@ -2880,7 +2854,7 @@ function onWorkspaceLocation() {
             <form
               v-if="active.id === 'deliveries'"
               class="filter-row"
-              @submit.prevent="assignAvailableCourier"
+              @submit.prevent="preparePolicyAssignment"
             >
               <label
                 >Mission ID<input
@@ -2891,20 +2865,10 @@ function onWorkspaceLocation() {
               /></label>
               <button
                 type="submit"
-                :disabled="
-                  assignmentBusy ||
-                  sectionLoading ||
-                  !assignmentMissionId.trim()
-                "
+                :disabled="sectionLoading || !assignmentMissionId.trim()"
               >
-                {{ assignmentBusy ? "Assigning…" : "Assign available courier" }}
+                Assign available courier
               </button>
-              <p v-if="assignmentError" class="error-text" role="alert">
-                {{ assignmentError }}
-              </p>
-              <p v-if="assignmentMessage" role="status">
-                {{ assignmentMessage }}
-              </p>
             </form>
             <ConsolidationPanel
               v-if="active.id === 'deliveries'"

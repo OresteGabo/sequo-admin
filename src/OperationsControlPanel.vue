@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import AdminIcon from "./AdminIcon.vue";
+import AdminReferenceInput from "./AdminReferenceInput.vue";
+import { hasAdminReference } from "./adminReferences";
 import CatalogOptionsEditor from "./CatalogOptionsEditor.vue";
 import MerchantStoreEditor from "./MerchantStoreEditor.vue";
 import {
@@ -175,6 +177,17 @@ function format(value: unknown, kind?: string): string {
       ? value
       : new Date(value).toLocaleString();
   if (kind === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) {
+    if (
+      value.every((item) =>
+        ["string", "number", "boolean"].includes(typeof item),
+      ) &&
+      value.join(", ").length <= 80
+    )
+      return value.join(", ") || "None";
+    return `${value.length} ${value.length === 1 ? "entry" : "entries"}`;
+  }
+  if (typeof value === "object") return `${Object.keys(value).length} fields`;
   return text(value);
 }
 function reset(
@@ -494,6 +507,19 @@ async function openControl(controlId: string, values: AdminControlValues) {
   Object.assign(readValues, values);
   await refresh();
 }
+async function openAction(
+  controlId: string,
+  nextActionId: string,
+  values: AdminControlValues,
+) {
+  await openControl(controlId, {});
+  if (pending.value || busy.value) {
+    error.value = "Review the pending action before starting another one.";
+    return;
+  }
+  chooseAction(nextActionId);
+  Object.assign(actionValues, values);
+}
 watch(
   () => selected.value?.id,
   () => activateService(selected.value),
@@ -514,7 +540,7 @@ watch(
 onBeforeUnmount(() => {
   generation++;
 });
-defineExpose({ refresh, openControl });
+defineExpose({ refresh, openControl, openAction });
 </script>
 
 <template>
@@ -608,7 +634,12 @@ defineExpose({ refresh, openControl });
               >
                 {{ human(option) }}
               </option></select
-            ><input
+            ><AdminReferenceInput
+              v-else-if="hasAdminReference(field.name)"
+              v-model="readValues[field.name]"
+              :field="field"
+              :request="request"
+            /><input
               v-else
               v-model="readValues[field.name]"
               :type="
@@ -860,6 +891,11 @@ defineExpose({ refresh, openControl });
                     :maxlength="field.maxLength"
                     :placeholder="field.placeholder"
                     rows="3"
+                  /><AdminReferenceInput
+                    v-else-if="hasAdminReference(field.name)"
+                    v-model="actionValues[field.name]"
+                    :field="field"
+                    :request="request"
                   /><input
                     v-else
                     v-model="actionValues[field.name]"
