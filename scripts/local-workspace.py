@@ -271,6 +271,28 @@ def wait_http(url, child, timeout=100, origin=None):
     raise WorkspaceError("Local service did not become ready. Check its private workspace log.")
 
 
+def generated_vite_config(admin):
+    # Only this private launcher config proxies the authenticated local module.
+    # Retain the browser Origin; do not synthesize forwarded identity headers.
+    proxy = {
+        path: {"target": API_URL, "changeOrigin": True, "xfwd": False}
+        for path in ("/api", "/relay-operator.html", "/relay-operator.js")
+    }
+    local = {
+        "root": str(admin),
+        "envDir": False,
+        "server": {
+            "host": "127.0.0.1", "port": WEB_PORT, "strictPort": True,
+            "proxy": proxy,
+        },
+    }
+    return (
+        "import base from " + json.dumps(str(admin / "vite.config.ts")) + ";\n"
+        "const local = " + json.dumps(local) + ";\n"
+        "export default {...base, ...local};\n"
+    )
+
+
 def run_fixture_seed():
     spec = importlib.util.spec_from_file_location("local_fixtures", Path(__file__).with_name("local-fixtures.py"))
     client = importlib.util.module_from_spec(spec)
@@ -316,8 +338,7 @@ def main(argv=None):
     settings = load_settings(workspace)
     private_write(workspace / "api.properties", api_properties(settings))
     private_write(workspace / "compose.env", "SEQUO_WORKSPACE_ID=" + settings["workspaceId"] + "\nPOSTGRES_PASSWORD=" + settings["databasePassword"] + "\n")
-    config = "import base from " + json.dumps(str(admin / "vite.config.ts")) + ";\nexport default {...base, root:" + json.dumps(str(admin)) + ",envDir:false,server:{host:'127.0.0.1',port:5173,strictPort:true}};\n"
-    private_write(workspace / "vite.config.mjs", config)
+    private_write(workspace / "vite.config.mjs", generated_vite_config(admin))
     env.update(JAVA_HOME=str(home), PATH=str(home / "bin") + os.pathsep + env.get("PATH", ""))
     build_env = dict(env, SEQUO_RELEASE_ID="sequo-admin-local-development")
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(api), env=env, capture_output=True, text=True)

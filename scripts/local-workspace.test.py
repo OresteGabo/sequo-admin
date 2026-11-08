@@ -67,6 +67,30 @@ class LocalWorkspaceTest(unittest.TestCase):
             self.assertEqual("false", props["sequo.relay.delayed-parcel-scheduler.enabled"])
             self.assertEqual("0", props["sequo.referrals.credit-cfa"])
 
+    def test_generated_private_vite_proxy_is_fixed_and_preserves_browser_origin(self):
+        admin = Path('/fixture/sequo-admin')
+        with patch.dict(os.environ, {
+            'VITE_SEQUO_API_BASE_URL': 'https://remote.invalid',
+            'HTTP_PROXY': 'http://remote.invalid',
+        }):
+            config = workspace.generated_vite_config(admin)
+        self.assertTrue(config.startswith('import base from "/fixture/sequo-admin/vite.config.ts";\n'))
+        local = json.loads(config.split('const local = ', 1)[1].split(';\n', 1)[0])
+        self.assertEqual(str(admin), local['root'])
+        self.assertFalse(local['envDir'])
+        self.assertEqual({
+            'host': '127.0.0.1', 'port': 5173, 'strictPort': True,
+            'proxy': {
+                path: {'target': 'http://127.0.0.1:55840', 'changeOrigin': True, 'xfwd': False}
+                for path in ('/api', '/relay-operator.html', '/relay-operator.js')
+            },
+        }, local['server'])
+        # No Origin/forwarded header injection, arbitrary targets or unrelated paths.
+        self.assertNotIn('headers', config)
+        self.assertNotIn('rewrite', config)
+        self.assertNotIn('remote.invalid', config)
+        self.assertTrue(config.endswith('export default {...base, ...local};\n'))
+
     def test_check_with_optional_fixture_flag_still_does_not_seed_or_read_private_settings(self):
         with patch.object(workspace, 'prerequisites', return_value=Path('/fixture/jdk21')), patch.object(workspace, 'run_fixture_seed') as seed, patch.object(workspace, 'load_settings') as private:
             self.assertEqual(0, workspace.main(['--check', '--with-fixtures']))
