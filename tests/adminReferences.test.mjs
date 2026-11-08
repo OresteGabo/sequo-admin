@@ -1,8 +1,9 @@
+import { encodeReference } from "../src/humanReference.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   hasAdminReference,
-  readAdminReferences,
+  readAdminReferences, resolveAdminReference, referenceText, referenceDisplayValue, referenceDisplayTree, adminReferenceKinds, referenceForId, clearAdminReferenceCache, rememberLegacyReference,
 } from "../src/adminReferences.ts";
 test("record choices use existing authenticated read routes and return only labels and IDs", async () => {
   const rows = await readAdminReferences("operatorUserId", async (path) => {
@@ -41,4 +42,60 @@ test("legacy known IDs remain enterable, unsupported fields never issue requests
     /offline/,
   );
   assert.deepEqual(await readAdminReferences("merchantId", async () => []), []);
+});
+
+test("typed references validate checksum and kind offline before the authenticated resolver", async () => {
+  for (const value of ["C12-345-6E7", "R98-765-4Q4", "wrong", "C12\u0000-345-6E6"]) {
+    await assert.rejects(resolveAdminReference("orderId", value, () => assert.fail("Invalid input must not reach the server")), /checksum/);
+  }
+  assert.deepEqual(await resolveAdminReference("orderId", "c12 345 6e6", async (path, retry, method, body) => {
+    assert.equal(path, "/api/references/resolve"); assert.equal(retry, true); assert.equal(method, "POST");
+    assert.deepEqual(body, { kind: "ORDER", reference: "C12-345-6E6", legacyId: false });
+    return { kind: "ORDER", id: "opaque-order", publicReference: "C12-345-6E6" };
+  }), { id: "opaque-order", publicReference: "C12-345-6E6" });
+});
+test("resolver errors and mismatched replies never become a canonical operation target", async () => {
+  for (const value of [{kind:"RETURN",id:"opaque",publicReference:"R98-765-4Q4"}, {kind:"ORDER",id:"opaque",publicReference:"C00-000-000"}, {kind:"ORDER",id:"",publicReference:"C12-345-6E6"}])
+    await assert.rejects(resolveAdminReference("orderId", "C12-345-6E6", async () => value), /different record/);
+  await assert.rejects(resolveAdminReference("orderId", "C12-345-6E6", async () => { throw Error("expired session"); }), /expired session/);
+  assert.equal(adminReferenceKinds.cooperativeId, "COOPERATIVE");
+  assert.equal(adminReferenceKinds.subOrderId, "MERCHANT_ORDER");
+});
+test("directory and display labels use only server-issued references while machine IDs stay exact", async () => {
+  const rows = await readAdminReferences("orderId", async () => [{id:"opaque-order",publicReference:"C12-345-6E6",status:"DELIVERED"}]);
+  assert.deepEqual(rows, [{id:"opaque-order",publicReference:"C12-345-6E6",label:"C12-345-6E6 · DELIVERED"}]);
+  const row = {id:"opaque-order",publicReference:"C12-345-6E6",customerId:"opaque-user",customerReference:"A12-345-6BJ",paymentReference:"PROVIDER-EXACT",idempotencyKey:"retry-exact"};
+  assert.equal(referenceText(row), "C12-345-6E6"); assert.equal(referenceText(row,"customerId"),"A12-345-6BJ");
+  assert.equal(referenceDisplayValue(row,"customerId"),"A12-345-6BJ");
+  assert.equal(referenceText({id:"legacy-only"}),"Reference unavailable");
+  assert.equal(referenceDisplayTree(row).id,"C12-345-6E6");
+  assert.equal(referenceDisplayTree(row).paymentReference,"PROVIDER-EXACT");
+  assert.equal(referenceDisplayTree(row).idempotencyKey,undefined);
+  assert.equal(row.id,"opaque-order"); assert.equal(row.idempotencyKey,"retry-exact");
+});
+
+test("confirmation labels use verified server references and forget prior session labels", async () => {
+  clearAdminReferenceCache();
+  assert.equal(referenceForId("orderId", "opaque-order"), "Reference unavailable");
+  await resolveAdminReference("orderId", "C12-345-6E6", async () => ({kind:"ORDER",id:"opaque-order",publicReference:"C12-345-6E6"}));
+  assert.equal(referenceForId("orderId", "opaque-order"), "C12-345-6E6");
+  assert.equal(referenceForId("returnId", "opaque-order"), "Reference unavailable");
+  rememberLegacyReference("orderId", "old:order");
+  assert.equal(referenceForId("orderId", "old:order"), "Legacy ID: old:order");
+  clearAdminReferenceCache();
+  assert.equal(referenceForId("orderId", "opaque-order"), "Reference unavailable");
+  assert.equal(referenceForId("orderId", "old:order"), "Reference unavailable");
+  assert.equal(referenceText({sourceOrderItemId:"sub-1",sourceOrderItemReference:"MAB-CDE-FJZ"},"sourceOrderItemId"),"MAB-CDE-FJZ");
+});
+
+test("named relationships never borrow a primary reference of a different entity kind", () => {
+  const ledger = { id:"entry-1",publicReference:"W00-000-000",missionId:"mission-1" };
+  // Use an actually valid LEDGER reference rather than relying on an invalid fixture.
+  ledger.publicReference = encodeReference("LEDGER", "000000");
+  assert.equal(referenceText(ledger,"missionId"),"Reference unavailable");
+  const order = {id:"order-1",publicReference:"C12-345-6E6",checkoutId:"checkout-1"};
+  assert.equal(referenceText(order,"checkoutId"),"Reference unavailable");
+  assert.equal(referenceText({...order,checkoutReference:"C12-345-6E6"},"checkoutId"),"Reference unavailable");
+  assert.equal(referenceText({...order,checkoutReference:"H00-000-0TP"},"checkoutId"),"H00-000-0TP");
+  assert.equal(referenceText({id:"order-1",publicReference:"C12-345-6E6",checkoutId:null},"checkoutId"),"—");
 });
