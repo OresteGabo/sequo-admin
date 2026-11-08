@@ -28,3 +28,15 @@ test('expired or denied admin reads propagate to the existing error handler', as
     throw new Error('Session expired')
   }), /Session expired/)
 })
+
+test('operations renders the persisted choice ETA price and workforce priority', async () => {
+  const groups = await readAdminSection('deliveries', async () => ({
+    missions: [{id:'mode-mission',deliveryCode:'mode-delivery',orderId:'mode-order',courierId:'salary-rider',
+      deliveryMode:'STANDARD',destinationType:'CUSTOMER_ADDRESS',status:'ACCEPTED_BY_COURIER',updatedAt:'2026-11-08T00:00:00Z',
+      deliveryOption:{id:'CLASSIC',etaMinMinutes:120,etaMaxMinutes:240,deliveryFeeCfa:400,zoneId:'LOCAL_FIXTURE_ONLY'},
+      assignmentWorkforceType:'SequoSalaried',subscriberPriority:true,assignmentReason:'Subscriber order assigned to salaried Sequo delivery capacity.'}],
+    merchantSubOrderCounts:{ACCEPTED_BY_SELLER:1},
+  }))
+  const assignment = groups[0].rows[0].cells[1]
+  for (const value of ['Classic','120–240 min','400 CFA','Sequo salaried','Subscriber priority','LOCAL_FIXTURE_ONLY']) assert.ok(assignment.includes(value),assignment)
+})

@@ -227,6 +227,10 @@ const adminOrders = ref<AdminOrderRow[]>([])
 const sectionLoading = ref(false)
 const sectionError = ref('')
 const sectionGroups = ref<AdminReadGroup[]>([])
+const assignmentMissionId = ref('')
+const assignmentBusy = ref(false)
+const assignmentError = ref('')
+const assignmentMessage = ref('')
 let sectionRequest = 0
 let sessionVersion = 0
 let refreshInFlight: Promise<boolean> | null = null
@@ -905,11 +909,27 @@ async function loadSection(section: AdminReadSection) {
   }
 }
 
-async function apiRequest<T>(path: string, retryAfterRefresh = true): Promise<T> {
+async function assignAvailableCourier() {
+  const missionId = assignmentMissionId.value.trim()
+  if (assignmentBusy.value || !isAuthenticated.value || !missionId || missionId.length > 128) return
+  const version = sessionVersion
+  assignmentBusy.value = true; assignmentError.value = ''; assignmentMessage.value = ''
+  try {
+    await apiRequest(`/api/delivery/missions/${encodeURIComponent(missionId)}/assign-policy`, true, 'POST')
+    if (version !== sessionVersion) return
+    assignmentMessage.value = 'Assignment saved. Existing assignments are retained on retry.'
+    await loadSection('deliveries')
+  } catch {
+    if (version === sessionVersion) assignmentError.value = 'Assignment was not confirmed. Refresh and check courier availability, workforce and capacity before retrying.'
+  } finally { if (version === sessionVersion) assignmentBusy.value = false }
+}
+
+async function apiRequest<T>(path: string, retryAfterRefresh = true, method: 'GET' | 'POST' = 'GET'): Promise<T> {
   const version = sessionVersion
   const token = accessToken.value
   if (!token.trim()) throw new Error('missing_session')
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    method,
     cache: 'no-store',
     headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
   })
@@ -917,7 +937,7 @@ async function apiRequest<T>(path: string, retryAfterRefresh = true): Promise<T>
   if ((response.status === 401 || response.status === 403) && retryAfterRefresh && refreshToken.value) {
     const refreshed = token !== accessToken.value || await refreshSession()
     if (version !== sessionVersion) throw new Error('session_changed')
-    if (refreshed) return apiRequest<T>(path, false)
+    if (refreshed) return apiRequest<T>(path, false, method)
     clearSession()
     authError.value = 'Your session ended. Please sign in again.'
     throw new Error('session_ended')
@@ -1045,6 +1065,7 @@ function clearSession() {
   selectedMerchantId.value = ''
   selectedOrderId.value = ''
   sectionGroups.value = []
+  assignmentMissionId.value = ''; assignmentBusy.value = false; assignmentError.value = ''; assignmentMessage.value = ''
   for (const loading of [dashboardLoading, usersLoading, merchantsLoading, ordersLoading, sectionLoading]) {
     loading.value = false
   }
@@ -1467,6 +1488,12 @@ function adminDeviceMetadata() {
                 {{ sectionLoading ? 'Refreshing...' : 'Refresh' }}
               </button>
             </div>
+            <form v-if="active.id === 'deliveries'" class="filter-row" @submit.prevent="assignAvailableCourier">
+              <label>Mission ID<input v-model="assignmentMissionId" required maxlength="128" autocomplete="off" /></label>
+              <button type="submit" :disabled="assignmentBusy || sectionLoading || !assignmentMissionId.trim()">{{ assignmentBusy ? 'Assigning…' : 'Assign available courier' }}</button>
+              <p v-if="assignmentError" class="error-text" role="alert">{{ assignmentError }}</p>
+              <p v-if="assignmentMessage" role="status">{{ assignmentMessage }}</p>
+            </form>
             <p v-if="sectionLoading" role="status">Loading {{ active.label.toLowerCase() }}…</p>
             <p v-else-if="sectionError" class="error-text" role="alert">{{ sectionError }}</p>
             <template v-else>

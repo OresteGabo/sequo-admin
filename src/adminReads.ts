@@ -13,6 +13,8 @@ type Deliveries = {
   missions: {
     id: string; deliveryCode: string; orderId: string; courierId: string | null
     deliveryMode: string; destinationType: string; status: string; updatedAt: string
+    deliveryOption?: { id: string; etaMinMinutes: number; etaMaxMinutes: number; deliveryFeeCfa: number; zoneId: string } | null
+    assignmentWorkforceType?: string | null; subscriberPriority?: boolean; assignmentReason?: string | null
   }[]
   merchantSubOrderCounts: Record<string, number>
 }
@@ -70,7 +72,11 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
           id: mission.id,
           cells: [
             `${mission.deliveryCode} · Order ${mission.orderId}`,
-            `${label(mission.deliveryMode)} · ${label(mission.destinationType)} · ${mission.courierId ?? 'Unassigned'}`,
+            [label(mission.deliveryOption?.id ?? mission.deliveryMode), label(mission.destinationType), mission.courierId ?? 'Unassigned',
+              mission.assignmentWorkforceType ? label(mission.assignmentWorkforceType) : '',
+              mission.subscriberPriority ? 'Subscriber priority' : '',
+              mission.deliveryOption ? `${mission.deliveryOption.etaMinMinutes}–${mission.deliveryOption.etaMaxMinutes} min · ${money(mission.deliveryOption.deliveryFeeCfa)} · ${mission.deliveryOption.zoneId}` : 'ETA unavailable',
+              mission.assignmentReason ?? ''].filter(Boolean).join(' · '),
             `${label(mission.status)} · ${timestamp(mission.updatedAt)}`,
           ],
         })),
