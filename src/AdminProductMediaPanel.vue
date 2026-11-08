@@ -4,6 +4,7 @@ import type { AdminControlRequest } from './adminControls.ts'
 import { decodeProductMedia, genericUploadIntent, mediaIntent, mediaPath, type ProductMediaState } from './adminProductMedia.ts'
 
 const props = defineProps<{ request: AdminControlRequest; actorId: string; initialProductId?: string }>()
+const emit = defineEmits<{ changed: [] }>()
 const productId = ref(props.initialProductId ?? '')
 const state = shallowRef<ProductMediaState | null>(null)
 const busy = ref(false); const error = ref(''); const message = ref(''); const reason = ref('')
@@ -76,7 +77,7 @@ async function submit(intent: { path: string; body: unknown }) {
     await props.request(intent.path, true, 'POST', intent.body)
     if (version !== generation) return
     state.value = null
-    if (await readback(id, version)) { pending.value = null; clearCapture(); message.value = 'Server state read back. Review the recorded photo and publication status below.' }
+    if (await readback(id, version)) { pending.value = null; clearCapture(); message.value = 'Server state read back. Review the recorded photo and publication status below.'; emit('changed') }
   } catch (e) {
     if (version === generation) { state.value = null; fail(e); error.value += ' The change may have reached the server. Retry the identical action or refresh and review; no local success is assumed.' }
   } finally { if (version === generation) busy.value = false }
@@ -110,7 +111,7 @@ async function retry() {
   try {
     await props.request(intent.path, true, 'POST', intent.body)
     if (version !== generation) return
-    if (await readback(id, version)) { pending.value = null; clearCapture(); message.value = 'Server state read back after retry.' }
+    if (await readback(id, version)) { pending.value = null; clearCapture(); message.value = 'Server state read back after retry.'; emit('changed') }
   } catch (e) { if (version === generation) { state.value = null; fail(e) } }
   finally { if (version === generation) busy.value = false }
 }
