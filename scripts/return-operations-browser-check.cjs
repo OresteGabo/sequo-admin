@@ -64,6 +64,7 @@ const server = http.createServer(async(req,res)=>{
   const browser=await puppeteer.launch({executablePath:process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true,args:['--no-sandbox']});
   try {
     const page=await browser.newPage();page.setDefaultTimeout(10000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
+    let cancelNext=false;const confirmations=[];page.on('dialog',async dialog=>{confirmations.push(dialog.message());if(cancelNext){cancelNext=false;await dialog.dismiss();}else await dialog.accept();});
     await page.setRequestInterception(true);page.on('request',request=>request.url().startsWith('http://127.0.0.1:')?request.continue():request.abort());
     await page.evaluateOnNewDocument(()=>{sessionStorage.setItem('sequo_admin_access_token','admin-fixture');sessionStorage.setItem('sequo_admin_refresh_token','refresh-fixture');});
     const root=`http://127.0.0.1:${server.address().port}/`;
@@ -81,13 +82,13 @@ const server = http.createServer(async(req,res)=>{
     await page.goto(root);await page.waitForSelector('.nav-button strong');await page.evaluate(navigateReturns);await page.waitForFunction(()=>document.querySelector('.return-operations')?.textContent.includes('return-fixture'));
     await open('return-fixture');assert.equal(await disabled('Confirm physical receipt'),true);assert.equal(await disabled('Record refund instruction'),true);
     assert.ok(await page.$eval('.return-operations',node=>node.textContent.includes('Pending written clarification')||node.textContent.includes('pending written clarification')));
-    await field('Collection receipt note','Collected fixture parcel');await click('Record SEQUO collection');await page.waitForFunction(()=>document.querySelector('.return-card h4')?.textContent.includes('Collected by sequo'));await waitIdle();assert.equal(bodies.collection.length,2);assert.deepEqual(bodies.collection[0],bodies.collection[1]);
+    await field('Collection receipt note','Collected fixture parcel');cancelNext=true;await click('Record SEQUO collection');assert.equal(bodies.collection.length,0);assert.ok(confirmations.at(-1).includes('return-fixture'));await click('Record SEQUO collection');await page.waitForFunction(()=>document.querySelector('.return-card h4')?.textContent.includes('Collected by sequo'));await waitIdle();assert.equal(bodies.collection.length,2);assert.deepEqual(bodies.collection[0],bodies.collection[1]);
     await field('Physical receipt note','Received; inspection pending');await field('Responsibility','Sequo');await click('Confirm physical receipt');await page.waitForFunction(()=>document.body.innerText.includes('The action was saved, but readback failed.'));
     assert.equal(await page.$eval('.return-operations textarea',node=>node.disabled),true);await click('Retry saved action');await page.waitForFunction(()=>document.querySelector('.return-card h4')?.textContent.includes('Received by sequo'));await waitIdle();assert.deepEqual(bodies.receipt[0],bodies.receipt[1]);assert.equal(await disabled('Record refund instruction'),true);
     await field('Condition inspection decision','ACCEPTED');await field('Condition inspection assessment','Sealed product verified at fixture inspection');await field('Inspected responsibility','Merchant');await click('Record condition decision');await page.waitForFunction(()=>[...document.querySelectorAll('.return-operations dt')].find(node=>node.textContent==='Condition decision')?.nextElementSibling.textContent.includes('Accepted'));await waitIdle();
     await open('return-legacy');assert.equal(await page.$$eval('.return-operations textarea',nodes=>nodes.every(node=>node.value==='')),true);
     await open('return-fixture');
-    await field('Refund instruction amount (CFA)','2500');await click('Record refund instruction');await page.waitForFunction(()=>document.body.innerText.includes('Fixture response lost after save'));
+    await field('Refund instruction amount (CFA)','2500');cancelNext=true;await click('Record refund instruction');assert.equal(bodies.refund.length,0);assert.equal(await page.evaluate(()=>sessionStorage.getItem('sequo_return_pending:admin-fixture')),null);assert.ok(confirmations.at(-1).includes('2,500 CFA'));assert.ok(confirmations.at(-1).includes('no provider transfer'));await click('Record refund instruction');await page.waitForFunction(()=>document.body.innerText.includes('Fixture response lost after save'));
     const stored=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('sequo_return_pending:admin-fixture')));assert.equal(stored.body.amountCfa,2500);
     await page.reload();await page.waitForSelector('.nav-button strong');await page.evaluate(navigateReturns);await page.waitForFunction(()=>document.querySelector('.return-card h4')?.textContent.includes('Refund pending'));await waitIdle();assert.equal(refundInstructions,1);assert.equal(bodies.refund.length,1);assert.equal(await page.evaluate(()=>sessionStorage.getItem('sequo_return_pending:admin-fixture')),null);
     assert.ok(await page.$eval('.return-operations',node=>node.textContent.includes('Not submitted')));assert.equal(await disabled('Record refund instruction'),true);
@@ -101,7 +102,7 @@ const server = http.createServer(async(req,res)=>{
     await page.reload();await page.waitForSelector('.nav-button strong');await page.evaluate(navigateReturns);await page.waitForFunction(()=>document.querySelector('.return-card h4')?.textContent.includes('legacy-received-key'));await waitIdle();
     const legacyIntent=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('sequo_return_pending:admin-fixture')));assert.equal(legacyIntent.body.idempotencyKey,'legacy-frozen-intent-key');assert.equal(legacyIntent.body.amountCfa,2500);
     assert.equal(refundInstructions,1);assert.equal(bodies.refund.length,1);await click('Revise after server refresh');assert.equal(await disabled('Record refund instruction'),true);
-    await (await page.$('.return-operations')).screenshot({path:'/tmp/sequo-task26-admin-refund.png'});
+    await (await page.$('.return-operations')).screenshot({path:'/tmp/sequo-task27-returns-admin.png'});
     await field('Return queue','AwaitingRelayDropoff');await page.$eval('.return-operations select',node=>node.dispatchEvent(new Event('change',{bubbles:true})));await waitIdle();assert.ok(await page.$eval('.return-operations',node=>node.textContent.includes('No returns in this queue.')));
     expired=true;await click('Refresh returns');await page.waitForFunction(()=>!document.querySelector('.return-operations'));assert.equal(await page.evaluate(()=>Object.keys(sessionStorage).some(key=>key.startsWith('sequo_return_pending:'))),false);
     expired=false;
@@ -113,6 +114,6 @@ const server = http.createServer(async(req,res)=>{
       assert.equal(await another.$('.return-operations'),null);assert.equal(returnReads,before);await another.close();
     }
     assert.deepEqual(errors,[]);
-    console.log('PASS: authenticated queues/detail, collection auth-refresh retry, receipt readback failure/frozen retry, explicit accepted/rejected inspection including legacy receipt, cleared notes between returns, one refund instruction recovered after reload, provider-not-submitted state, Requested/Received legacy-key review without another instruction, frozen legacy retry retained, unconfigured deadline, empty queue and expired/missing/non-admin fail-closed sessions. Mock HTTP only.');
+    console.log('PASS: authenticated queues/detail, collection auth-refresh retry, receipt readback failure/frozen retry, explicit accepted/rejected inspection including legacy receipt, cleared notes between returns, one refund instruction recovered after reload, provider-not-submitted state, Requested/Received legacy-key review without another instruction, frozen legacy retry retained, contextual confirmations/cancellation with zero writes, unconfigured deadline, empty queue and expired/missing/non-admin fail-closed sessions. Mock HTTP only.');
   } finally {await browser.close();server.close();}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1;});

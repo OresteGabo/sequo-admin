@@ -101,6 +101,17 @@ async function mutate(action: Action, body?: Record<string, string | number>) {
   const detail = selected.value
   if (!pending.value && (!detail || stale.value || !body)) return
   if (!pending.value && action === 'refund' && (!detail || !canRecordRefundInstruction(detail))) return
+  if (!pending.value) {
+    const target = `Return ${requireId(detail)} · Order ${detail?.orderId}`
+    const confirmation = action === 'refund'
+      ? `Record a refund instruction of ${Number(body?.amountCfa).toLocaleString('en-US')} CFA?\n${target}\nThis records an instruction only; no provider transfer is executed.`
+      : action === 'inspection'
+        ? `Record ${body?.decision} condition inspection?\n${target}\nAssessment: ${body?.conditionAssessment}\nResponsibility: ${body?.responsibility}`
+        : action === 'receipt'
+          ? `Confirm actual SEQUO physical receipt?\n${target}\nReceipt note: ${body?.conditionAssessment}\nResponsibility: ${body?.responsibility}`
+          : `Confirm actual SEQUO collection?\n${target}\nCollection note: ${body?.metadata}`
+    if (!window.confirm(confirmation)) return
+  }
   const intent = pending.value ?? { returnId: requireId(detail), action, body: Object.freeze({ ...body, idempotencyKey: crypto.randomUUID() }), acknowledged: false }
   saveIntent(intent)
   await run(async () => {
