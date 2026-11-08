@@ -45,6 +45,8 @@ See [the admin release and local acceptance guide](docs/RELEASE_RECETTE.md) for 
 
 ## Development
 
+For the real isolated API/database and passwordless local administrator, see [Local workspace](docs/LOCAL_WORKSPACE.md): `npm run dev:local`.
+
 Install dependencies:
 
 ```sh

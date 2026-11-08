@@ -37,3 +37,7 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Disposable local administrator workspace (keys, logs, generated configuration)
+/.local-workspace/
+__pycache__/

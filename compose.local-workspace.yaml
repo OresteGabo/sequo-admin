@@ -1,0 +1,25 @@
+# Dedicated logical fixture database. No public interface, production credentials or app secrets.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: sequo_admin_dev
+      POSTGRES_USER: sequo_admin_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Use the local workspace launcher}
+    ports:
+      - "127.0.0.1:55924:5432"
+    volumes:
+      - fixture-postgres:/var/lib/postgresql/data
+    labels:
+      dev.sequo.workspace: ${SEQUO_WORKSPACE_ID:?Use the local workspace launcher}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sequo_admin_dev -d sequo_admin_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: "no"
+
+volumes:
+  fixture-postgres:
+    labels:
+      dev.sequo.workspace: ${SEQUO_WORKSPACE_ID:?Use the local workspace launcher}
