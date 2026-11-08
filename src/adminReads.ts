@@ -49,7 +49,13 @@ type DeliveryPricing = {
     includedKm: number; effectiveFrom: string | null
   }
 }
+type BusinessParameter = {
+  reference: number; key: string; label: string; state: string
+  effectiveValues: Record<string, string>; source: string; changeAuthority: string
+  changeProcedure: string; verification: string; pendingDecision?: string | null
+}
 type BusinessParameters = {
+  parameters?: BusinessParameter[]; generatedAt?: string
   defaultCommissionRateBps: number; commissionOverrideCount: number
   relayStorageFeeAssessmentCount: number; relayExcludedProductPolicySource: string; returnWindowPolicySource: string
 }
@@ -165,15 +171,27 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
           ['Effective from', timestamp(active.effectiveFrom)],
         ] satisfies [string, string][]).map(([name, value]) => ({ id: name, cells: [name, value, active.profile] })),
       }, {
-        title: 'Business parameters', columns: ['Setting', 'Value', 'Scope'],
+        title: 'Parameter inventory status', columns: ['Setting', 'Value', 'Scope'],
+        summary: parameters.parameters?.length === 10
+          ? `All ten signed Annex A.6 parameter families. Read at ${timestamp(parameters.generatedAt ?? null)}. Configuration does not imply policy approval.`
+          : 'The complete parameter inventory is unavailable from this server. Refresh after the supported API is deployed; no policy values are inferred.',
         rows: ([
           ['Default commission', rate(parameters.defaultCommissionRateBps), 'Merchant commissions'],
           ['Merchant commission overrides', count(parameters.commissionOverrideCount), 'Merchant commissions'],
-          ['Storage fee assessments', count(parameters.relayStorageFeeAssessmentCount), 'Relay operations'],
-          ['Excluded product policy source', parameters.relayExcludedProductPolicySource, 'Relay operations'],
-          ['Return window policy source', parameters.returnWindowPolicySource, 'Returns'],
+          ['Storage fee assessments', count(parameters.relayStorageFeeAssessmentCount), 'Recorded history'],
         ] satisfies [string, string, string][]).map(([name, value, scope]) => ({ id: name, cells: [name, value, scope] })),
-      }]
+      }, ...(parameters.parameters ?? []).map((parameter): AdminReadGroup => ({
+        title: `${parameter.reference}. ${parameter.label}`,
+        summary: `${label(parameter.state)}${parameter.pendingDecision ? ` · ${parameter.pendingDecision}` : ''}`,
+        columns: ['Effective setting / control', 'Value / procedure', 'Scope'],
+        rows: [
+          ...Object.entries(parameter.effectiveValues).map(([name, value]) => ({ id: `${parameter.key}:${name}`, cells: [name, value, label(parameter.state)] as [string, string, string] })),
+          { id: `${parameter.key}:source`, cells: ['Runtime source', parameter.source, 'Server read'] },
+          { id: `${parameter.key}:authority`, cells: ['Who may change it', parameter.changeAuthority, 'SEQUO control'] },
+          { id: `${parameter.key}:change`, cells: ['How to change it', parameter.changeProcedure, 'Approved change'] },
+          { id: `${parameter.key}:verify`, cells: ['Verify the effective value', parameter.verification, 'Readback and regression'] },
+        ],
+      }))]
     }
   }
 }

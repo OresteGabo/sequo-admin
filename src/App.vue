@@ -1507,7 +1507,7 @@ function adminDeviceMetadata() {
             <p v-if="sectionLoading" role="status">Loading {{ active.label.toLowerCase() }}…</p>
             <p v-else-if="sectionError" class="error-text" role="alert">{{ sectionError }}</p>
             <template v-else>
-              <section v-for="group in sectionGroups" :key="group.title" class="settings-grid">
+              <section v-for="group in sectionGroups" :key="group.title" class="settings-grid" :class="{ 'parameter-inventory': active.id === 'settings' }">
                 <h3>{{ group.title }}</h3>
                 <p v-if="group.summary">{{ group.summary }}</p>
                 <p v-if="!group.rows.length" role="status">No records to display.</p>
@@ -1539,3 +1539,8 @@ function adminDeviceMetadata() {
     </section>
   </main>
 </template>
+
+<style scoped>
+.parameter-inventory .table-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 2.8fr) minmax(0, .9fr); }
+.parameter-inventory [role="cell"] { min-width: 0; overflow-wrap: anywhere; }
+</style>
