@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { readAdminSection, type AdminReadGroup, type AdminReadSection } from './adminReads'
 import ConsolidationPanel from './ConsolidationPanel.vue'
+import ReturnOperationsPanel from './ReturnOperationsPanel.vue'
 
 type SectionId =
   | 'dashboard'
@@ -327,7 +328,7 @@ const sections: Section[] = [
   {
     id: 'returns',
     label: 'Returns',
-    statusLabel: 'View only',
+    statusLabel: 'Ready',
     description: 'Return requests, inspections and refund readiness.',
     icon: 'assignment_return',
   },
@@ -447,6 +448,7 @@ function selectSection(section: SectionId) {
     case 'users': void loadUsers(); break
     case 'merchants': void loadMerchants(); break
     case 'orders': void loadOrders(); break
+    case 'returns': ++sectionRequest; sectionGroups.value = []; sectionError.value = ''; sectionLoading.value = false; break
     default: void loadSection(section)
   }
 }
@@ -1091,6 +1093,7 @@ function clearSession() {
   loginExpiresAt.value = ''
   sessionStorage.removeItem('sequo_admin_access_token')
   sessionStorage.removeItem('sequo_admin_refresh_token')
+  Object.keys(sessionStorage).filter((key) => key.startsWith('sequo_return_pending:')).forEach((key) => sessionStorage.removeItem(key))
 }
 
 function formatRemainingTime(remainingMs: number): string {
@@ -1485,10 +1488,10 @@ function adminDeviceMetadata() {
           <article v-else class="panel">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">{{ active.id === 'deliveries' ? 'Operations' : 'Read only' }}</p>
+                <p class="eyebrow">{{ ['deliveries', 'returns'].includes(active.id) ? 'Operations' : 'Read only' }}</p>
                 <h2>{{ active.label }}</h2>
               </div>
-              <button class="secondary" type="button" :disabled="sectionLoading" @click="selectSection(active.id)">
+              <button v-if="active.id !== 'returns'" class="secondary" type="button" :disabled="sectionLoading" @click="selectSection(active.id)">
                 <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
                 {{ sectionLoading ? 'Refreshing...' : 'Refresh' }}
               </button>
@@ -1500,6 +1503,7 @@ function adminDeviceMetadata() {
               <p v-if="assignmentMessage" role="status">{{ assignmentMessage }}</p>
             </form>
             <ConsolidationPanel v-if="active.id === 'deliveries'" :key="currentUser?.id" :request="apiRequest" />
+            <ReturnOperationsPanel v-if="active.id === 'returns' && currentUser" :key="currentUser.id" :actor-id="currentUser.id" :request="apiRequest" />
             <p v-if="sectionLoading" role="status">Loading {{ active.label.toLowerCase() }}…</p>
             <p v-else-if="sectionError" class="error-text" role="alert">{{ sectionError }}</p>
             <template v-else>
