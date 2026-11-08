@@ -61,6 +61,7 @@ class LocalWorkspaceTest(unittest.TestCase):
             self.assertEqual("validate", props["spring.jpa.hibernate.ddl-auto"])
             self.assertEqual("true", props["spring.flyway.enabled"])
             self.assertEqual("true", props["sequo.admin.local-fixtures.enabled"])
+            self.assertEqual("true", props["sequo.auth.local-mobile-access.enabled"])
             self.assertEqual("sequo-api-local-admin-fixture", props["sequo.auth.jwt.issuer"])
             self.assertEqual("sequo-admin-local-fixture", props["sequo.auth.jwt.audience"])
             self.assertEqual("LOCAL_FIXTURE", props["sequo.admin.local-access.environment"])

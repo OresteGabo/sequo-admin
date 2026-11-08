@@ -109,6 +109,7 @@ def api_properties(settings):
         "spring.jpa.open-in-view": "false", "spring.h2.console.enabled": "false",
         "sequo.admin.local-access.enabled": "true",
         "sequo.admin.local-fixtures.enabled": "true",
+        "sequo.auth.local-mobile-access.enabled": "true",
         "sequo.admin.local-access.environment": "LOCAL_FIXTURE",
         "sequo.admin.local-access.user-id": settings["fixtureUserId"],
         "sequo.auth.jwt.secret": settings["jwtSecret"],
