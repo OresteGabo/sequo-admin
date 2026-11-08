@@ -88,7 +88,7 @@ test('unsupported provider, tariff, party negotiation and nested editing do not 
     await assert.rejects(readAdminControl(id, {}, request))
   }
   await assert.rejects(runAdminControlAction('relay-fees', 'assess', {}, request), /approved tariff/)
-  await assert.rejects(runAdminControlAction('catalog-customizations', 'edit', {}, request), /structured group/)
+  await assert.rejects(runAdminControlAction('catalog-customizations', 'edit', {}, request), /structured group\/option/)
   assert.equal(calls, 0)
 })
 
