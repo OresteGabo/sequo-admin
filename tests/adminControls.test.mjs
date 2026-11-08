@@ -70,8 +70,8 @@ test('merchant, dispatch, relay and cooperative mutations use their actual serve
   assert.deepEqual(buildAdminControlRequest('merchant-orders', 'mark-packed', { subOrderId: 's', merchantId: 'm', packageCount: '2', customerId: 'forged' }), {
     path: '/api/merchant/sub-orders/s/mark-packed', method: 'POST', body: { merchantId: 'm', packageCount: 2 },
   })
-  assert.deepEqual(buildAdminControlRequest('delivery-missions', 'assign', { missionId: 'd', courierId: 'c', workforceType: 'SequoSalaried' }), {
-    path: '/api/delivery/missions/d/assign', method: 'POST', body: { courierId: 'c' },
+  assert.deepEqual(buildAdminControlRequest('delivery-missions', 'assign', { missionId: 'd', courierId: 'c', workforceType: 'SequoSalaried', reason: 'Reviewed assignment', idempotencyKey: 'assign-key-1' }), {
+    path: '/api/delivery/missions/d/assign', method: 'POST', body: { courierId: 'c', reason: 'Reviewed assignment', idempotencyKey: 'assign-key-1' },
   })
   assert.deepEqual(buildAdminControlRequest('relay-parcels', 'review', { parcelId: 'p', eventId: 'e', idempotencyKey: 'k', metadata: 'Inspected\nAwaiting decision', evaluatedAt: '2000-01-01' }), {
     path: '/api/relay/parcels/p/review', method: 'POST', body: { eventId: 'e', idempotencyKey: 'k', metadata: 'Inspected\nAwaiting decision' },
@@ -81,10 +81,10 @@ test('merchant, dispatch, relay and cooperative mutations use their actual serve
   })
 })
 
-test('unsupported provider, tariff, party negotiation and nested editing do not send requests', async () => {
+test('unsupported provider, tariff, native media and generic nested editing do not send requests', async () => {
   let calls = 0
   const request = async () => { calls++; throw new Error('Must not send') }
-  for (const id of ['provider-money-actions', 'negotiation-oversight', 'catalog-media']) {
+  for (const id of ['provider-money-actions', 'catalog-media']) {
     await assert.rejects(readAdminControl(id, {}, request))
   }
   await assert.rejects(runAdminControlAction('relay-fees', 'assess', {}, request), /approved tariff/)
@@ -209,4 +209,37 @@ test('merchant availability uses the persisted structured store contract instead
     path: '/api/admin/web/merchants/existing-merchant/store', method: 'GET',
   })
   assert.deepEqual(control.actions, [], 'Structured editor owns the nested reviewed settings write')
+})
+
+
+test('manual dispatch decisions carry reasons and replay keys; pause never falsely promises replay', () => {
+  for (const action of ['assign', 'reassign', 'assign-policy', 'offer']) {
+    const record = getAdminControl('delivery-missions').actions.find(item => item.id === action)
+    assert.ok(record.fields.some(field => field.name === 'reason' && field.required))
+    assert.ok(record.fields.some(field => field.name === 'idempotencyKey' && field.required))
+  }
+  assert.deepEqual(buildAdminControlRequest('delivery-missions', 'assign-policy', { missionId: 'm', reason: 'Reviewed policy assignment', idempotencyKey: 'policy-key-1', courierId: 'forged', workforceType: 'SequoSalaried', courierFeeCfa: 1, priority: 'forged' }), {
+    path: '/api/delivery/missions/m/assign-policy', method: 'POST', body: { reason: 'Reviewed policy assignment', idempotencyKey: 'policy-key-1' },
+  })
+  assert.deepEqual(buildAdminControlRequest('courier-availability', 'unpause', { courierId: 'c', reason: 'Reviewed return to work', idempotencyKey: 'resume-key-1' }), {
+    path: '/api/delivery/missions/couriers/unpause', method: 'POST', body: { courierId: 'c', reason: 'Reviewed return to work', idempotencyKey: 'resume-key-1' },
+  })
+  assert.equal(getAdminControl('courier-availability').actions.find(action => action.id === 'pause').fields.some(field => field.name === 'idempotencyKey'), false)
+  assert.equal(buildAdminControlRequest('delivery-admin-history', null, { missionId: 'm' }).path, '/api/delivery/missions/m/admin-actions')
+  assert.equal(buildAdminControlRequest('courier-admin-history', null, { courierId: 'c' }).path, '/api/delivery/missions/couriers/c/admin-actions')
+  assert.equal(getAdminControl('user-access-management').read.columns.find(column => column.key === 'user.roles').label, 'Roles')
+})
+
+
+test('administrator bargaining oversight is read-only and uses redacted admin routes rather than participant identity', async () => {
+  const control = getAdminControl('negotiation-oversight')
+  assert.equal(control.supported, true)
+  assert.deepEqual(control.actions, [])
+  assert.deepEqual(buildAdminControlRequest(control.id, null, { merchantId: 'm' }), {
+    path: '/api/admin/web/bargaining-threads?limit=50&merchantId=m', method: 'GET',
+  })
+  assert.equal(buildAdminControlRequest('negotiation-detail', null, { threadId: 'thread' }).path, '/api/admin/web/bargaining-threads/thread')
+  let calls = 0
+  await assert.rejects(runAdminControlAction(control.id, 'counteroffer', { threadId: 'thread', amountCfa: 1 }, async () => { calls++; return {} }), /not supported/)
+  assert.equal(calls, 0)
 })
