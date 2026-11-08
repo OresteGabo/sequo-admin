@@ -215,7 +215,7 @@ test('merchant availability uses the persisted structured store contract instead
 test('manual dispatch decisions carry reasons and replay keys; pause never falsely promises replay', () => {
   for (const action of ['assign', 'reassign', 'assign-policy', 'offer']) {
     const record = getAdminControl('delivery-missions').actions.find(item => item.id === action)
-    assert.ok(record.fields.some(field => field.name === 'reason' && field.required))
+    assert.ok(record.fields.some(field => field.name === 'reason' && field.required && field.maxLength === 1000))
     assert.ok(record.fields.some(field => field.name === 'idempotencyKey' && field.required))
   }
   assert.deepEqual(buildAdminControlRequest('delivery-missions', 'assign-policy', { missionId: 'm', reason: 'Reviewed policy assignment', idempotencyKey: 'policy-key-1', courierId: 'forged', workforceType: 'SequoSalaried', courierFeeCfa: 1, priority: 'forged' }), {
