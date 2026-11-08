@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { AdminControlRequest } from './adminControls'
-import { catalogOptionDrafts, catalogOptionsMatch, prepareCatalogOptions, readCatalogOptions, writeCatalogOptions, type CatalogOptionGroup, type CatalogOptionGroupDraft, type CatalogOptionsIntent } from './catalogOptions'
+import { catalogOptionDrafts, catalogOptionsMatch, prepareCatalogOptions, readCatalogOptions, restoreCatalogOptionsIntent, writeCatalogOptions, type CatalogOptionGroup, type CatalogOptionGroupDraft, type CatalogOptionsIntent } from './catalogOptions'
 
 const props = defineProps<{ productId: string; request: AdminControlRequest; actorId?: string }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -13,9 +13,23 @@ const acknowledged = ref(false)
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
+const storageFailed = ref(false)
 const locked = computed(() => busy.value || !!preview.value || !!pending.value)
 let generation = 0
 onUnmounted(() => { generation++ })
+const storageKey = () => props.actorId ? `sequo_catalog_options_pending:${encodeURIComponent(props.actorId)}:${encodeURIComponent(props.productId)}` : null
+function persist(intent: CatalogOptionsIntent | null) {
+  const key = storageKey()
+  if (!key) return
+  try { if (intent) sessionStorage.setItem(key, JSON.stringify(intent)); else sessionStorage.removeItem(key) }
+  catch { storageFailed.value = true }
+}
+function restore(): CatalogOptionsIntent | null {
+  const key = storageKey()
+  if (!key) return null
+  try { return restoreCatalogOptionsIntent(JSON.parse(sessionStorage.getItem(key) ?? 'null'), props.productId) }
+  catch { return null }
+}
 const message = (caught: unknown) => caught instanceof Error ? caught.message : 'The option menu could not be confirmed. Refresh before editing.'
 const freshOption = () => ({ clientId: crypto.randomUUID(), name: '', priceDeltaCfa: 0, active: true })
 function addGroup() {
@@ -36,7 +50,7 @@ async function refresh() {
     if (version !== generation) return
     show(result)
     if (pending.value && catalogOptionsMatch(result, pending.value.body)) {
-      pending.value = null; acknowledged.value = false; emit('changed')
+      pending.value = null; persist(null); acknowledged.value = false; emit('changed')
       notice.value = 'The server confirms the reviewed menu, including its saved option identities.'
     } else notice.value = pending.value ? 'The reviewed menu is not confirmed. Inspect the server state before retrying or discarding the saved intent.' : 'Full server menu loaded, including unavailable groups and options.'
   } catch (caught) { if (version === generation) error.value = message(caught) }
@@ -52,11 +66,11 @@ async function submit() {
   const intent = pending.value ?? preview.value
   if (!intent || busy.value) return
   const version = generation
-  pending.value = intent; preview.value = null; busy.value = true; error.value = ''; notice.value = ''; current.value = null
+  pending.value = intent; persist(intent); preview.value = null; busy.value = true; error.value = ''; notice.value = ''; current.value = null
   try {
     const result = await writeCatalogOptions(intent, props.request, () => { if (version === generation) acknowledged.value = true })
     if (version !== generation) return
-    show(result); pending.value = null; acknowledged.value = false; emit('changed')
+    show(result); pending.value = null; persist(null); acknowledged.value = false; emit('changed')
     notice.value = 'Option menu confirmed by server readback. Saved option identities are retained.'
   } catch (caught) {
     if (version === generation) error.value = `${acknowledged.value ? 'The server acknowledged the save, but readback is not confirmed. ' : ''}${message(caught)} The reviewed request is kept unchanged.`
@@ -64,12 +78,12 @@ async function submit() {
 }
 function discard() {
   if (!busy.value && current.value) {
-    pending.value = null; preview.value = null; acknowledged.value = false; groups.value = catalogOptionDrafts(current.value)
+    pending.value = null; persist(null); preview.value = null; acknowledged.value = false; groups.value = catalogOptionDrafts(current.value)
     notice.value = 'Saved local intent discarded after reading the server. Review the loaded menu before making another change.'
   }
 }
 watch(() => [props.productId, props.actorId], () => {
-  generation++; busy.value = false; current.value = null; groups.value = []; pending.value = null; preview.value = null; acknowledged.value = false; error.value = ''; notice.value = ''
+  generation++; busy.value = false; current.value = null; groups.value = []; pending.value = restore(); preview.value = null; acknowledged.value = false; error.value = ''; notice.value = ''; storageFailed.value = false
   void refresh()
 }, { immediate: true })
 </script>
@@ -77,6 +91,7 @@ watch(() => [props.productId, props.actorId], () => {
 <template>
   <section class="panel catalog-options-editor" aria-label="Product options editor">
     <div class="options-heading"><div><h3>Options &amp; supplements</h3><p>Build a clear choice for your customers. Prices are supplements to the product price, in CFA.</p></div><button type="button" class="secondary" :disabled="busy || !!preview" @click="refresh">{{ busy ? 'Reading or saving…' : 'Reload server menu' }}</button></div>
+    <p v-if="storageFailed" class="error-text" role="status">This browser could not preserve the reviewed menu across reloads. Keep this page open until the server confirms it.</p>
     <p v-if="error" class="error-text" role="alert">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
     <aside v-if="pending" class="options-review" aria-label="Unconfirmed menu change"><h4>Reviewed change awaiting confirmation</h4><p>{{ pending.body.groups.length }} groups · {{ pending.removedGroups }} groups and {{ pending.removedOptions }} options removed.</p><p>Refresh to inspect the server. Retrying keeps the same reviewed menu and checks the current server state first.</p><button type="button" :disabled="busy" @click="submit">Verify / retry reviewed change</button><button type="button" class="secondary" :disabled="busy || !current" @click="discard">Discard saved intent after review</button></aside>
     <form v-if="current && !pending" @submit.prevent="review">

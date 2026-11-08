@@ -28,6 +28,10 @@ function productPath(productId: string) {
 }
 export async function readCatalogOptions(productId: string, request: AdminControlRequest): Promise<CatalogOptionGroup[]> {
   const data = await request<unknown>(`${productPath(productId)}?includeInactive=true`)
+  return parseCatalogOptions(productId, data)
+}
+function parseCatalogOptions(productId: string, data: unknown): CatalogOptionGroup[] {
+  productPath(productId)
   if (!Array.isArray(data) || data.length > 20) throw new Error('The full option menu could not be read. Refresh before editing.')
   const groupIds = new Set<string>(); const optionIds = new Set<string>()
   return data.map(group => {
@@ -99,4 +103,17 @@ export async function writeCatalogOptions(intent: CatalogOptionsIntent, request:
   const readback = await readCatalogOptions(intent.productId, request)
   if (!catalogOptionsMatch(readback, intent.body)) throw new Error('The saved menu is not confirmed by readback. Refresh and inspect it before repeating.')
   return readback
+}
+
+/** Revalidate saved browser state before allowing an explicit retry; never auto-submit it. */
+export function restoreCatalogOptionsIntent(value: unknown, productId: string): CatalogOptionsIntent | null {
+  try {
+    if (!object(value) || value.productId !== productId || !object(value.body) || !Array.isArray(value.body.groups)) return null
+    const before = parseCatalogOptions(productId, value.before)
+    const groups = value.body.groups
+    if (groups.some(group => !object(group) || !Array.isArray(group.options) || group.options.some(option => !object(option)))) return null
+    const drafts = (groups as CatalogOptionBody['groups']).map((group, index) => ({ ...group, clientId: `restored-group-${index}`, options: group.options.map((option, optionIndex) => ({ ...option, clientId: `restored-option-${index}-${optionIndex}` })) }))
+    const restored = prepareCatalogOptions(productId, before, drafts)
+    return JSON.stringify(restored.body) === JSON.stringify(value.body) ? restored : null
+  } catch { return null }
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { reactive } from 'vue'
-import { catalogOptionDrafts, prepareCatalogOptions, readCatalogOptions, writeCatalogOptions, catalogOptionsMatch } from '../src/catalogOptions.ts'
+import { catalogOptionDrafts, prepareCatalogOptions, readCatalogOptions, writeCatalogOptions, catalogOptionsMatch, restoreCatalogOptionsIntent } from '../src/catalogOptions.ts'
 
 const stored = () => [{ id: 'g-size', productId: 'p-food', name: 'Size', minChoices: 1, maxChoices: 1, sortOrder: 0, active: true, options: [
   { id: 'o-regular', name: 'Regular', priceDeltaCfa: 0, sortOrder: 0, active: true },
@@ -123,4 +123,19 @@ test('wrong product, missing inactive states, duplicate identities and failed re
   await assert.rejects(readCatalogOptions('..', async () => []), /valid product/)
   await assert.rejects(readCatalogOptions('p-food', async () => { throw new Error('401') }), /401/)
   assert.deepEqual(await readCatalogOptions('p-food', async () => []), [])
+})
+
+
+test('saved reviewed menus restore only for the same product with validated immutable fields', () => {
+  const before = stored(); const draft = catalogOptionDrafts(before); draft[0].options[1].active = true
+  const intent = prepareCatalogOptions('p-food', before, draft)
+  const restored = restoreCatalogOptionsIntent(JSON.parse(JSON.stringify(intent)), 'p-food')
+  assert.deepEqual(restored, intent)
+  assert.equal(Object.isFrozen(restored.body.groups[0].options), true)
+  assert.equal(restoreCatalogOptionsIntent(intent, 'other-product'), null)
+  const malformed = JSON.parse(JSON.stringify(intent)); malformed.body.groups[0].options[0].priceDeltaCfa = -1
+  assert.equal(restoreCatalogOptionsIntent(malformed, 'p-food'), null)
+  const extras = JSON.parse(JSON.stringify(intent)); extras.body.actorUserId = 'forged'
+  assert.equal(restoreCatalogOptionsIntent(extras, 'p-food'), null)
+  assert.equal(restoreCatalogOptionsIntent({ productId: 'p-food', body: { groups: [null] } }, 'p-food'), null)
 })
