@@ -313,8 +313,9 @@ function prepareAction() {
     confirmationOpen.value = true;
   } catch (failure) {
     error.value =
-      action.value.fields.some((field) => field.name === "expectedUpdatedAt") &&
-      !actionValues.expectedUpdatedAt
+      action.value.fields.some((field) =>
+        ["expectedUpdatedAt", "expectedRevision"].includes(field.name) && !actionValues[field.name],
+      )
         ? "Select the current record above before reviewing this action."
         : failure instanceof Error
           ? failure.message
@@ -847,7 +848,7 @@ defineExpose({ refresh, openControl, openAction });
                 <label
                   v-for="field in action.fields.filter(
                     (field) =>
-                      !['idempotencyKey', 'expectedUpdatedAt'].includes(
+                      !['idempotencyKey', 'expectedUpdatedAt', 'expectedRevision'].includes(
                         field.name,
                       ),
                   )"
@@ -1010,7 +1011,7 @@ defineExpose({ refresh, openControl, openAction });
           <div
             v-for="field in action.fields.filter(
               (field) =>
-                !['idempotencyKey', 'expectedUpdatedAt'].includes(field.name) &&
+                !['idempotencyKey', 'expectedUpdatedAt', 'expectedRevision'].includes(field.name) &&
                 reviewedValues?.[field.name] !== undefined &&
                 reviewedValues?.[field.name] !== '',
             )"

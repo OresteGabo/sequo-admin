@@ -39,6 +39,7 @@ const puppeteer = require('puppeteer-core');
     await page.goto(origin);await page.waitForSelector('.resource-table');
     await page.select('select[aria-label="Choose service action"]','set-prices');await page.waitForSelector('.action-form');
     assert.equal(await page.$eval('.action-form input[type=number]',i=>i.value),'400');
+    assert.equal(await page.$$eval('.action-form label',labels=>labels.some(l=>l.textContent.includes('Current settings revision'))),false,'Internal revision is preserved without an editable operator field');
     await fill('Minimum delivery price','500');await fill('Additional kilometer price','80');
     await fill('SEQUO approval reference','LOCAL_FIXTURE_ONLY tariff approval');await fill('Reason for this tariff','Mock reviewed price change');
     await click('Review action');await page.waitForSelector('[role=dialog]');await click('Cancel');assert.equal(writes.length,0);

@@ -6,6 +6,7 @@ const props = defineProps<{
   modelValue?: unknown;
   field: AdminControlField;
   request: AdminControlRequest;
+  disabled?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const listId = useId();
@@ -43,6 +44,7 @@ async function load() {
   <span class="reference-input">
     <input
       :value="String(modelValue ?? '')"
+      :disabled="disabled"
       :list="listId"
       :required="field.required"
       :maxlength="field.maxLength"

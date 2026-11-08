@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import type { AdminControlRequest } from './adminControls.ts'
+import type { AdminControlRequest, AdminControlField } from './adminControls.ts'
+import AdminReferenceInput from './AdminReferenceInput.vue'
 import { decodeProductMedia, genericUploadIntent, mediaIntent, mediaPath, type ProductMediaState } from './adminProductMedia.ts'
 
 const props = defineProps<{ request: AdminControlRequest; actorId: string; initialProductId?: string }>()
 const emit = defineEmits<{ changed: [] }>()
 const productId = ref(props.initialProductId ?? '')
+const productField: AdminControlField = { name: 'productId', label: 'Product', type: 'string', location: 'path', required: true, maxLength: 128 }
 const state = shallowRef<ProductMediaState | null>(null)
 const busy = ref(false); const error = ref(''); const message = ref(''); const reason = ref('')
 const video = ref<HTMLVideoElement | null>(null)
@@ -121,13 +123,13 @@ async function reviewUncertain() { pending.value = null; await load() }
 <template>
   <section class="media-panel" aria-labelledby="media-panel-heading">
     <header><div><h3 id="media-panel-heading">Product photos and publication</h3><p>Use a live photograph when the product policy requires it, or the SEQUO-approved image for a standard product.</p></div></header>
-    <form class="media-load" @submit.prevent="load"><label>Existing product ID<input v-model="productId" :disabled="busy || !!pending" autocomplete="off" /></label><button :disabled="busy || !!pending" type="submit">{{ busy ? 'Reading…' : 'Read product' }}</button></form>
+    <form class="media-load" @submit.prevent="load"><label>Product<AdminReferenceInput v-model="productId" :field="productField" :request="request" :disabled="busy || !!pending" /></label><button :disabled="busy || !!pending" type="submit">{{ busy ? 'Reading…' : 'Read product' }}</button></form>
     <p v-if="error" role="alert" class="media-error">{{ error }}</p><p v-if="message" role="status">{{ message }}</p>
-    <div v-if="pending" class="media-warning"><p>An action is awaiting verification. The frozen retry keeps the same product, revision, reason, image bytes and retry key. Leaving or reloading this page discards the local retry; inspect server state before starting another action.</p><button :disabled="busy" @click="retry">Retry identical action</button><button :disabled="busy" @click="reviewUncertain">Refresh and review server state</button></div>
+    <div v-if="pending" class="media-warning"><p>The result is unconfirmed. Retry keeps your original photo and details. Check the recorded history before leaving this page; reloading clears the pending upload.</p><button :disabled="busy" @click="retry">Retry identical action</button><button :disabled="busy" @click="reviewUncertain">Refresh and review server state</button></div>
     <div v-if="state" class="media-state">
       <div><h4>{{ state.product.name }}</h4><p>{{ state.product.status }} · {{ state.product.kind }} · {{ state.product.photoRequired ? 'Camera photo required' : 'Existing product photo policy' }}</p><p>Recorded capture: {{ state.product.cameraVerified ? 'Uploaded through camera validation' : 'No validated camera upload' }}<span v-if="state.product.capturedAtLabel"> · {{ state.product.capturedAtLabel }}</span></p></div>
       <img v-if="preview" :src="preview" alt="Current or newly captured product photograph" class="media-preview" /><p v-else>No preview is available for this product.</p>
-      <div v-if="state.product.kind === 'SellerSpecific'" class="media-camera"><video v-if="streaming" ref="video" autoplay playsinline muted aria-label="Live product camera" /><button :disabled="busy || !!pending || streaming || cameraStarting" @click="startCamera">Start live camera</button><button v-if="streaming" :disabled="busy" @click="takePhoto">Capture photograph</button><button v-if="streaming" @click="stopCamera">Cancel camera</button><p>JPEG only, at most 8 MiB. The server validates and stores the upload.</p></div>
+      <div v-if="state.product.kind === 'SellerSpecific'" class="media-camera"><video v-if="streaming" ref="video" autoplay playsinline muted aria-label="Live product camera" /><button :disabled="busy || !!pending || streaming || cameraStarting" @click="startCamera">Start live camera</button><button v-if="streaming" :disabled="busy" @click="takePhoto">Capture photograph</button><button v-if="streaming" @click="stopCamera">Cancel camera</button><p>JPEG photos up to 8 MB.</p></div>
       <div v-else><label>Standard product image (JPEG, up to 8 MiB)<input type="file" accept="image/jpeg,.jpg,.jpeg" :disabled="busy || !!pending" @change="chooseGeneric" /></label><label class="generic-approval"><input v-model="genericApproved" type="checkbox" :disabled="busy || !!pending || !genericFile" />I approve this generic image for this standard product on behalf of SEQUO.</label><p v-if="!state.approvedGenericImageUrl">No preset generic image is configured. You can explicitly approve and upload a standard product image here.</p></div>
       <label>Reason for change<textarea v-model="reason" maxlength="1000" :disabled="busy || !!pending" /></label>
       <div class="media-actions"><button v-if="state.product.kind === 'SellerSpecific'" :disabled="busy || !!pending || !capture || !reason.trim()" @click="act('camera')">Upload captured photo</button><template v-else><button :disabled="busy || !!pending || !genericFile || !genericApproved || !reason.trim()" @click="act('generic-file')">Approve and upload generic image</button><button v-if="state.approvedGenericImageUrl" :disabled="busy || !!pending || !reason.trim()" @click="act('generic')">Use preset approved image</button></template><button :disabled="busy || !!pending || !reason.trim() || state.product.status === 'ACTIVE'" @click="act('ACTIVE')">Publish product</button><button :disabled="busy || !!pending || !reason.trim() || state.product.status !== 'ACTIVE'" @click="act('INACTIVE')">Deactivate product</button></div>

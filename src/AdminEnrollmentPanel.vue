@@ -62,8 +62,8 @@ async function confirm() {
 </script>
 <template>
   <section class="panel enrollment-panel">
-    <div class="panel-heading"><div><h2>{{ title }}</h2><p>Set up an operational profile for an existing active account. Normal sign-in and a separately granted {{ kind === 'merchant' ? 'MERCHANT_OWNER' : 'COURIER' }} role are required.</p></div></div>
-    <p class="subtle">This creates no login identity, password, KYC approval, wallet or provider payment. A SUPER_ADMIN manages account roles separately.</p>
+    <div class="panel-heading"><div><h2>{{ title }}</h2><p>Choose an existing {{ kind === 'merchant' ? 'merchant' : 'rider' }} account to register its {{ kind === 'merchant' ? 'store' : 'delivery profile' }}.</p></div></div>
+    <p class="subtle">A super administrator can manage account access and roles in Users.</p>
     <form class="enrollment-lookup" @submit.prevent="load">
       <label>Existing account<AdminReferenceInput v-if="!pending" v-model="userId" :field="userField" :request="request" /><input v-else :value="userId" disabled /></label>
       <button class="secondary" type="submit" :disabled="loading || busy || !actorId || !userId.trim()">{{ loading ? 'Loading account…' : 'Refresh account and history' }}</button>
@@ -78,9 +78,9 @@ async function confirm() {
       </fieldset>
       <button v-if="!pending" type="submit" class="secondary" :disabled="locked || !actorId">Review enrollment</button>
     </form>
-    <div v-if="pending" class="pending-action-tools"><p>The saved account, revision, reason and retry key remain frozen. Refreshing never submits a write.</p><button class="secondary" type="button" :disabled="loading || busy" @click="review">Review exact saved enrollment</button><button v-if="snapshot && !snapshot.history.some(h => h.idempotencyKey === pending?.body.idempotencyKey)" class="secondary" type="button" :disabled="loading || busy" @click="discardSaved">Discard saved intent after checking history</button></div>
+    <div v-if="pending" class="pending-action-tools"><p>Your reviewed details are saved for retry. Refresh to check whether registration completed.</p><button class="secondary" type="button" :disabled="loading || busy" @click="review">Review exact saved enrollment</button><button v-if="snapshot && !snapshot.history.some(h => h.idempotencyKey === pending?.body.idempotencyKey)" class="secondary" type="button" :disabled="loading || busy" @click="discardSaved">Discard saved intent after checking history</button></div>
     <details v-if="snapshot?.history.length"><summary>Enrollment actor history</summary><ul><li v-for="entry in snapshot.history" :key="entry.id">{{ entry.kind }} · {{ entry.entityId }} · {{ entry.actorUserId }} · {{ entry.createdAt }}<p>{{ entry.reason }}</p></li></ul></details>
-    <div v-if="preview" class="enrollment-review" role="region" aria-label="Review enrollment"><h3>Confirm {{ kind === 'merchant' ? 'merchant' : 'rider' }} enrollment</h3><dl><dt>Existing account</dt><dd>{{ preview.userId }}</dd><dt v-if="kind === 'merchant'">Merchant name</dt><dd v-if="kind === 'merchant'">{{ preview.body.name }}</dd><template v-else><dt>Workforce and vehicle</dt><dd>{{ preview.body.workforceType }} · {{ preview.body.vehicleType }}</dd></template><dt>Reason</dt><dd>{{ preview.body.reason }}</dd></dl><p>The server verifies current staff authority, role, account revision and existing profiles before recording this enrollment.</p><button type="button" class="secondary" :disabled="busy" @click="preview = null">Cancel</button><button type="button" class="secondary" :disabled="busy" @click="confirm">Confirm enrollment</button></div>
+    <div v-if="preview" class="enrollment-review" role="region" aria-label="Review enrollment"><h3>Confirm {{ kind === 'merchant' ? 'merchant' : 'rider' }} enrollment</h3><dl><dt>Existing account</dt><dd>{{ preview.userId }}</dd><dt v-if="kind === 'merchant'">Merchant name</dt><dd v-if="kind === 'merchant'">{{ preview.body.name }}</dd><template v-else><dt>Workforce and vehicle</dt><dd>{{ preview.body.workforceType }} · {{ preview.body.vehicleType }}</dd></template><dt>Reason</dt><dd>{{ preview.body.reason }}</dd></dl><p>Confirm the selected account and these details before saving.</p><button type="button" class="secondary" :disabled="busy" @click="preview = null">Cancel</button><button type="button" class="secondary" :disabled="busy" @click="confirm">Confirm enrollment</button></div>
   </section>
 </template>
 <style scoped>

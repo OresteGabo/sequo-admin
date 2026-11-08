@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import AdminReferenceInput from './AdminReferenceInput.vue'
+import type { AdminControlField } from './adminControls'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { relayAcknowledged, relayConfirmed, relayIntent, validRelayIntent, parseRelaySites, parseRelaySetup, parseRelayMission, type RelayAction, type RelayIntent, type RelayMutation, type RelaySetup, type RelaySite, type RelaySlot } from './relayAdministration'
 type Request = <T>(path: string, retryAfterRefresh?: boolean, method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: unknown) => Promise<T>
 type Mission = { id: string; orderId: string; relayPointId: string | null; status: string; destinationType: string; pickupAt: string | null; updatedAt: string; courierId: string | null }
+const missionField: AdminControlField = { name: 'missionId', label: 'Delivery mission', type: 'string', location: 'path', required: true, maxLength: 128 }
 const props = defineProps<{ request: Request; actorId: string }>()
 const emit = defineEmits<{ changed: [] }>()
 const storageKey = `sequo_relay_admin_pending:${props.actorId}`
@@ -85,7 +88,7 @@ onMounted(() => { if (pending.value) reason.value = String(pending.value.body.re
 <template>
   <section class="detail-card relay-administration">
     <header><h3>Relay setup and SEQUO receipt</h3><button :disabled="busy" @click="run(() => load())">Refresh server state</button></header>
-    <p>Logical storage only. Existing operator assignment, pickup codes, identity checks and overdue disposition remain in their normal guarded workflows. No tariff or physical locker command is created here.</p>
+    <p>Set up relay locations and recorded storage spaces, then record receipt of an eligible delivery. Open relay operations above for pickup and overdue decisions.</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="busy" role="status">Loading server records…</p>
     <div v-if="pending" class="pending"><strong>Unconfirmed saved action: {{ pending.action }}</strong><p>Target: {{ pending.siteId ?? 'new site' }}. Inputs are frozen until its server result is confirmed.</p><button :disabled="busy" @click="run(() => write(pending!.action))">Retry saved action unchanged</button><button :disabled="busy" @click="discard">Discard local retry after review</button></div>
@@ -106,7 +109,7 @@ onMounted(() => { if (pending.value) reason.value = String(pending.value.body.re
       <ul><li v-for="slot in selected.slots" :key="slot.id">{{ slot.lockerCode }} · {{ slot.status }} <button :disabled="busy || stale || !!pending || !reason.trim() || slot.status === 'OCCUPIED'" @click="availability(slot)">{{ slot.status === 'MAINTENANCE' ? 'Review return to available' : 'Review maintenance' }}</button></li></ul>
       <form @submit.prevent="addSlot"><label>New logical slot code<input v-model="slotCode" maxlength="32" required :disabled="busy || !!pending"></label><button :disabled="busy || stale || !!pending || !reason.trim()">Review new logical slot</button></form>
       <h4>SEQUO physical relay receipt</h4><p>Use an existing relay mission after its assigned rider has recorded pickup. The persisted destination and free slot are verified again by the server.</p>
-      <form @submit.prevent="readMission"><label>Mission ID<input v-model="missionId" required :disabled="busy || !!pending"></label><button :disabled="busy || !!pending">Read mission from server</button></form>
+      <form @submit.prevent="readMission"><label>Mission ID<AdminReferenceInput v-model="missionId" :field="missionField" :request="request" :disabled="busy || !!pending" /></label><button :disabled="busy || !!pending">Read mission from server</button></form>
       <div v-if="mission"><p>Mission {{ mission.id }} · order {{ mission.orderId }} · {{ mission.status }} · assigned rider {{ mission.courierId ?? 'none' }} · relay {{ mission.relayPointId ?? 'none' }}</p>
         <label>Free logical slot<select v-model="depositSlotId" :disabled="busy || !!pending"><option value="">Choose a slot</option><option v-for="slot in selected.slots.filter(slot => slot.status === 'AVAILABLE')" :key="slot.id" :value="slot.id">{{ slot.lockerCode }}</option></select></label>
         <label><input v-model="physicalReceipt" type="checkbox" :disabled="busy || !!pending"> The package is physically received by SEQUO at this selected relay site</label>
