@@ -183,6 +183,9 @@ type AdminOrderRow = {
 }
 
 const apiBaseUrl = import.meta.env.VITE_SEQUO_API_BASE_URL ?? 'http://localhost:8080'
+const releaseId = (import.meta.env.VITE_SEQUO_RELEASE_ID ?? '').trim()
+const releaseEnvironment = (import.meta.env.VITE_SEQUO_RELEASE_ENVIRONMENT ?? '').trim()
+const releaseEnvironmentLabel = releaseEnvironment === 'LOCAL_FIXTURE' ? 'Local fixture' : releaseEnvironment === 'STAGING' ? 'Staging' : releaseEnvironment
 const relayOperationsUrl = `${apiBaseUrl.replace(/\/$/, '')}/relay-operator.html`
 const googleWebClientId = (import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID ?? '').trim()
 const activeSection = ref<SectionId>('dashboard')
@@ -1153,6 +1156,7 @@ function adminDeviceMetadata() {
           </span>
         </button>
       </nav>
+      <small v-if="releaseId && releaseEnvironment" class="release-identity">{{ releaseEnvironmentLabel }} · {{ releaseId }}</small>
     </aside>
 
     <section class="workspace">
@@ -1553,6 +1557,7 @@ function adminDeviceMetadata() {
 </template>
 
 <style scoped>
+.release-identity { display: block; margin-top: 1rem; overflow-wrap: anywhere; color: var(--muted, #687d75); }
 .parameter-inventory .table-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 2.8fr) minmax(0, .9fr); }
 .parameter-inventory [role="cell"] { min-width: 0; overflow-wrap: anywhere; }
 </style>

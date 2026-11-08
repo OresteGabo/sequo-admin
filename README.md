@@ -39,6 +39,10 @@ Recommended additions:
 - [docs/ROADMAP.md](docs/ROADMAP.md): suggested build phases.
 - [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md): step-by-step tasks from first build to launch.
 
+## Release preparation
+
+See [the admin release and local acceptance guide](docs/RELEASE_RECETTE.md) for identifiable archives, public API configuration, fixture-only evidence and outstanding staging/hosting checks.
+
 ## Development
 
 Install dependencies:
