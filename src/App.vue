@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { readAdminSection, type AdminReadGroup, type AdminReadSection } from './adminReads'
+import ConsolidationPanel from './ConsolidationPanel.vue'
 
 type SectionId =
   | 'dashboard'
@@ -924,20 +925,21 @@ async function assignAvailableCourier() {
   } finally { if (version === sessionVersion) assignmentBusy.value = false }
 }
 
-async function apiRequest<T>(path: string, retryAfterRefresh = true, method: 'GET' | 'POST' = 'GET'): Promise<T> {
+async function apiRequest<T>(path: string, retryAfterRefresh = true, method: 'GET' | 'POST' = 'GET', body?: unknown): Promise<T> {
   const version = sessionVersion
   const token = accessToken.value
   if (!token.trim()) throw new Error('missing_session')
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method,
     cache: 'no-store',
-    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   if (version !== sessionVersion) throw new Error('session_changed')
   if ((response.status === 401 || response.status === 403) && retryAfterRefresh && refreshToken.value) {
     const refreshed = token !== accessToken.value || await refreshSession()
     if (version !== sessionVersion) throw new Error('session_changed')
-    if (refreshed) return apiRequest<T>(path, false, method)
+    if (refreshed) return apiRequest<T>(path, false, method, body)
     clearSession()
     authError.value = 'Your session ended. Please sign in again.'
     throw new Error('session_ended')
@@ -948,7 +950,10 @@ async function apiRequest<T>(path: string, retryAfterRefresh = true, method: 'GE
       ? 'This account is not allowed to use SEQUO Admin.'
       : 'Your session ended. Please sign in again.'
   }
-  if (!response.ok) throw new Error('request_failed')
+  if (!response.ok) {
+    const error = await response.json().catch(() => null) as { message?: string; reason?: string } | null
+    throw new Error(error?.message || error?.reason || 'request_failed')
+  }
   const data = (await response.json()) as T
   if (version !== sessionVersion) throw new Error('session_changed')
   return data
@@ -1480,7 +1485,7 @@ function adminDeviceMetadata() {
           <article v-else class="panel">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow">Read only</p>
+                <p class="eyebrow">{{ active.id === 'deliveries' ? 'Operations' : 'Read only' }}</p>
                 <h2>{{ active.label }}</h2>
               </div>
               <button class="secondary" type="button" :disabled="sectionLoading" @click="selectSection(active.id)">
@@ -1494,6 +1499,7 @@ function adminDeviceMetadata() {
               <p v-if="assignmentError" class="error-text" role="alert">{{ assignmentError }}</p>
               <p v-if="assignmentMessage" role="status">{{ assignmentMessage }}</p>
             </form>
+            <ConsolidationPanel v-if="active.id === 'deliveries'" :key="currentUser?.id" :request="apiRequest" />
             <p v-if="sectionLoading" role="status">Loading {{ active.label.toLowerCase() }}…</p>
             <p v-else-if="sectionError" class="error-text" role="alert">{{ sectionError }}</p>
             <template v-else>
