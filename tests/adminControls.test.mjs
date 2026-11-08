@@ -34,7 +34,7 @@ test('catalog create uses the admin route, safe initial state and only declared 
   }), {
     path: '/api/catalog/products', method: 'POST', body: {
       merchantId: 'merchant-a', name: 'Rice', kind: 'SellerSpecific', status: 'INACTIVE',
-      basePriceCfa: 1400, bargainingEnabled: false, idempotencyKey: 'create-1',
+      basePriceCfa: 1400, bargainingEnabled: false,
     },
   })
 })
@@ -84,7 +84,7 @@ test('merchant, dispatch, relay and cooperative mutations use their actual serve
 test('unsupported provider, tariff, party negotiation and nested editing do not send requests', async () => {
   let calls = 0
   const request = async () => { calls++; throw new Error('Must not send') }
-  for (const id of ['provider-money-actions', 'negotiation-oversight', 'user-access-management', 'catalog-media']) {
+  for (const id of ['provider-money-actions', 'negotiation-oversight', 'catalog-media']) {
     await assert.rejects(readAdminControl(id, {}, request))
   }
   await assert.rejects(runAdminControlAction('relay-fees', 'assess', {}, request), /approved tariff/)
@@ -179,4 +179,23 @@ test('exact detail reads reject a different resource including nested admin proj
   await assert.rejects(readAdminControl('courier-detail', { courierId: 'mine' }, async () => ({ courier: { id: 'other' } })), /different resource/)
   const order = await readAdminControl('order-detail', { orderId: 'order-1' }, async () => ({ order: { id: 'order-1' }, lines: [], snapshotState: 'UNAVAILABLE_LEGACY', history: [] }))
   assert.equal(order.rows[0].snapshotState, 'UNAVAILABLE_LEGACY')
+})
+
+
+test('access writes are SUPER_ADMIN guidance only and preserve exact revisions and server authority fields', () => {
+  const revision = '2026-11-08T12:00:00.123456789Z'
+  const control = getAdminControl('user-access-management')
+  assert.ok(control.actions.every(action => JSON.stringify(action.allowedRoles) === JSON.stringify(['SUPER_ADMIN'])))
+  assert.deepEqual(buildAdminControlRequest(control.id, 'grant-role', { userId: 'existing', roleCode: 'SUPPORT_AGENT', expectedUpdatedAt: revision, reason: 'Approved assignment', idempotencyKey: 'role-key-1', actorUserId: 'forged', authorizationVersion: 'forged' }), {
+    path: '/api/admin/web/users/existing/roles/SUPPORT_AGENT', method: 'PUT', body: { expectedUpdatedAt: revision, reason: 'Approved assignment', idempotencyKey: 'role-key-1' },
+  })
+  assert.throws(() => buildAdminControlRequest(control.id, 'access', { userId: 'existing', active: true, status: 'DELETED', expectedUpdatedAt: revision, reason: 'Not allowed', idempotencyKey: 'access-key-1' }), /supported choice/)
+})
+
+test('merchant membership never sends a global role array or silently accepts a different merchant read', async () => {
+  assert.deepEqual(buildAdminControlRequest('merchant-memberships', 'set-membership', { merchantId: 'm', userId: 'u', roleCode: 'MERCHANT_STAFF', active: false, expectedUpdatedAt: 'exact-version', reason: 'Scope removal', idempotencyKey: 'membership-key-1', roles: ['ADMIN'] }), {
+    path: '/api/admin/web/merchant-memberships/m/u/MERCHANT_STAFF', method: 'PUT', body: { active: false, expectedUpdatedAt: 'exact-version', reason: 'Scope removal', idempotencyKey: 'membership-key-1' },
+  })
+  assert.throws(() => buildAdminControlRequest('merchant-memberships', 'set-membership', { merchantId: 'm', userId: 'u', roleCode: 'ADMIN' }), /supported choice/)
+  await assert.rejects(readAdminControl('merchant-memberships', { merchantId: 'm' }, async () => ({ merchantId: 'foreign', memberships: [], history: [] })), /different resource/)
 })
