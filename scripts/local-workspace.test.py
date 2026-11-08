@@ -55,6 +55,8 @@ class LocalWorkspaceTest(unittest.TestCase):
             self.assertEqual("local", props["spring.profiles.active"])
             self.assertEqual("127.0.0.1", props["server.address"])
             self.assertEqual("NONE", props["server.forward-headers-strategy"])
+            self.assertEqual("8MB", props["spring.servlet.multipart.max-file-size"])
+            self.assertEqual("9MB", props["spring.servlet.multipart.max-request-size"])
             self.assertEqual("jdbc:postgresql://127.0.0.1:55924/sequo_admin_dev", props["spring.datasource.url"])
             self.assertEqual("validate", props["spring.jpa.hibernate.ddl-auto"])
             self.assertEqual("true", props["spring.flyway.enabled"])

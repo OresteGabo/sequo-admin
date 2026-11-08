@@ -99,6 +99,8 @@ def api_properties(settings):
         "spring.config.import": "",
         "server.address": "127.0.0.1", "server.port": str(API_PORT),
         "server.forward-headers-strategy": "NONE",
+        "spring.servlet.multipart.max-file-size": "8MB",
+        "spring.servlet.multipart.max-request-size": "9MB",
         "spring.datasource.url": "jdbc:postgresql://127.0.0.1:%s/%s" % (DB_PORT, DATABASE),
         "spring.datasource.username": DATABASE, "spring.datasource.password": settings["databasePassword"],
         "spring.datasource.driver-class-name": "org.postgresql.Driver",
