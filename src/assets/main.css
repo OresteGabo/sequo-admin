@@ -469,11 +469,6 @@ a {
   color: #93af9f;
   z-index: 1;
 }
-.auth-story-footer > div {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 .auth-form-panel {
   display: flex;
   flex-direction: column;
@@ -1975,9 +1970,6 @@ fieldset {
   }
   .delivery-node {
     transform-origin: right center;
-  }
-  .auth-story-footer > div {
-    display: none;
   }
 }
 @media (max-width: 740px) {

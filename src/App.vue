@@ -1994,9 +1994,6 @@ function onWorkspaceLocation() {
       </div>
       <div class="auth-story-footer">
         <span>Built for the SEQUO team.</span>
-        <div>
-          <AdminIcon name="shield" :size="15" /><span>Secure by design</span>
-        </div>
       </div>
     </section>
     <section class="auth-form-panel">
