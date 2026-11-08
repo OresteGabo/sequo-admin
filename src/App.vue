@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { readAdminSection, type AdminReadGroup, type AdminReadSection } from './adminReads'
 import ConsolidationPanel from './ConsolidationPanel.vue'
 import ReturnOperationsPanel from './ReturnOperationsPanel.vue'
+import FinanceLedgerPanel from './FinanceLedgerPanel.vue'
 
 type SectionId =
   | 'dashboard'
@@ -1504,6 +1505,7 @@ function adminDeviceMetadata() {
             </form>
             <ConsolidationPanel v-if="active.id === 'deliveries'" :key="currentUser?.id" :request="apiRequest" />
             <ReturnOperationsPanel v-if="active.id === 'returns' && currentUser" :key="currentUser.id" :actor-id="currentUser.id" :request="apiRequest" />
+            <FinanceLedgerPanel v-if="['payments', 'commissions'].includes(active.id)" :key="currentUser?.id" :request="apiRequest" />
             <p v-if="sectionLoading" role="status">Loading {{ active.label.toLowerCase() }}…</p>
             <p v-else-if="sectionError" class="error-text" role="alert">{{ sectionError }}</p>
             <template v-else>

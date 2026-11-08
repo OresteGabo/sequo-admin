@@ -15,6 +15,7 @@ type Deliveries = {
     deliveryMode: string; destinationType: string; status: string; updatedAt: string
     deliveryOption?: { id: string; etaMinMinutes: number; etaMaxMinutes: number; deliveryFeeCfa: number; zoneId: string } | null
     assignmentWorkforceType?: string | null; subscriberPriority?: boolean; assignmentReason?: string | null
+    customerDeliveryFeeCfa?: number; courierFeeCfa?: number; shortfallCfa?: number
   }[]
   merchantSubOrderCounts: Record<string, number>
 }
@@ -22,6 +23,8 @@ type Payments = {
   merchantPayouts: {
     id: string; merchantId: string; orderId: string; merchantNetCfa: number; status: string
     activeReturnHold: boolean; activeDisputeHold: boolean
+    sourceOrderItemId?: string; commissionCfa?: number; platformMarginCfa?: number
+    payoutEligibleAt?: string; payoutDueBy?: string
   }[]
   webhookEvents: {
     id: string; provider: string; eventId: string; checkoutId: string
@@ -30,7 +33,7 @@ type Payments = {
 }
 type Commissions = {
   defaultRateBps: number
-  overrides: { merchantId: string; commissionRateBps: number; reason: string | null }[]
+  overrides: { merchantId: string; commissionRateBps: number; reason: string | null; updatedByUserId?: string; updatedAt?: string }[]
 }
 type Relay = {
   storageFeeAssessmentCount: number
@@ -63,6 +66,7 @@ type BusinessParameters = {
 const prefix = '/api/admin/web'
 const count = (value: number) => value.toLocaleString('en-US')
 const money = (value: number) => `${count(value)} CFA`
+const optionalMoney = (value: number | undefined) => typeof value === 'number' ? money(value) : 'Unavailable'
 const rate = (bps: number) => `${(bps / 100).toFixed(2)}%`
 const timestamp = (value: string | null) => value ? new Date(value).toLocaleString() : '—'
 const label = (value: string) => value.replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -87,6 +91,15 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
           ],
         })),
       }, {
+        title: 'Recorded delivery amounts',
+        summary: 'Mission amounts are stored estimates/records. Read the mission ledger in Payments for posted courier payables and SEQUO shortfall; no provider transfer is inferred.',
+        columns: ['Mission / order', 'Recorded customer / courier amount', 'Recorded shortfall / workforce'],
+        rows: data.missions.map(mission => ({ id: mission.id, cells: [
+          `${mission.id} · Order ${mission.orderId} · ${mission.courierId ?? 'Unassigned'}`,
+          `Customer ${optionalMoney(mission.customerDeliveryFeeCfa)} · Courier estimate ${optionalMoney(mission.courierFeeCfa)}`,
+          `${optionalMoney(mission.shortfallCfa)} · ${mission.assignmentWorkforceType ? label(mission.assignmentWorkforceType) : 'Workforce snapshot unavailable'}`,
+        ] })),
+      }, {
         title: 'Merchant fulfillment', columns: ['State', 'Sub-orders', 'Scope'],
         rows: Object.entries(data.merchantSubOrderCounts).map(([status, total]) => ({
           id: status, cells: [label(status), count(total), 'All merchant sub-orders'],
@@ -96,13 +109,15 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
     case 'payments': {
       const data = await request<Payments>(`${prefix}/payments`)
       return [{
-        title: 'Merchant payouts', columns: ['Merchant / order', 'Net payout', 'Status'],
+        title: 'Merchant payouts', summary: 'Stored settlement accruals and holds. Provider payment is confirmed only by its verified transfer state.', columns: ['Merchant / order / sub-order', 'Stored net / commission / margin', 'Status / holds / eligibility'],
         rows: data.merchantPayouts.map((payout) => ({
           id: payout.id,
           cells: [
-            `${payout.merchantId} · Order ${payout.orderId}`,
-            money(payout.merchantNetCfa),
-            [label(payout.status), payout.activeReturnHold ? 'Return hold' : '', payout.activeDisputeHold ? 'Dispute hold' : '']
+            `${payout.merchantId} · Order ${payout.orderId} · Source ${payout.sourceOrderItemId ?? 'Unavailable'}`,
+            `Net ${money(payout.merchantNetCfa)} · Commission ${optionalMoney(payout.commissionCfa)} · Margin ${optionalMoney(payout.platformMarginCfa)}`,
+
+            [label(payout.status), payout.activeReturnHold ? 'Return hold' : '', payout.activeDisputeHold ? 'Dispute hold' : '',
+              payout.payoutEligibleAt ? `Eligible ${timestamp(payout.payoutEligibleAt)}` : '', payout.payoutDueBy ? `Due ${timestamp(payout.payoutDueBy)}` : '']
               .filter(Boolean).join(' · '),
           ],
         })),
@@ -121,10 +136,10 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
     case 'commissions': {
       const data = await request<Commissions>(`${prefix}/commissions`)
       return [{
-        title: 'Merchant commission overrides', summary: `Default commission ${rate(data.defaultRateBps)}`,
-        columns: ['Merchant', 'Commission', 'Reason'],
+        title: 'Merchant commission overrides', summary: `Current default commission ${rate(data.defaultRateBps)}. Read a frozen sub-order snapshot in Finance source records to verify an existing order.`,
+        columns: ['Merchant', 'Current commission', 'Reason / recorded operator'],
         rows: data.overrides.map((item) => ({
-          id: item.merchantId, cells: [item.merchantId, rate(item.commissionRateBps), item.reason ?? '—'],
+          id: item.merchantId, cells: [item.merchantId, rate(item.commissionRateBps), [item.reason ?? '—', item.updatedByUserId ?? 'Recorded operator unavailable', item.updatedAt ? timestamp(item.updatedAt) : ''].filter(Boolean).join(' · ')],
         })),
       }]
     }
