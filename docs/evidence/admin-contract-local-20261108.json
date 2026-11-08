@@ -1,0 +1,23 @@
+{
+  "environment": "ISOLATED_LOCAL_POSTGRESQL",
+  "verification": "AUTHENTICATED_READS_AFTER_RESTART",
+  "operationalWrites": 0,
+  "fixtureAccounts": 15,
+  "fixtureScenarios": 26,
+  "orders": 19,
+  "riders": 4,
+  "returns": 7,
+  "merchantEnrollmentRead": "CURRENT_ACCOUNT_AND_STORES",
+  "riderEnrollmentRead": "CURRENT_LINKED_PROFILE",
+  "catalogMediaRead": "CURRENT_STORED_PRODUCT_POLICY_AND_HISTORY",
+  "relaySetupRead": "CURRENT_SITE_SLOTS_AND_HISTORY",
+  "relaySlotCount": 3,
+  "deliveryPricing": {
+    "minimumDeliveryFeeCfa": 400,
+    "extraKmFeeCfa": 100,
+    "includedKm": 5
+  },
+  "annexParameterCount": 10,
+  "providerPayments": "DISCONNECTED",
+  "freshPickupCredentials": "NOT_CONSUMED_BY_THIS_VERIFICATION"
+}

@@ -4,6 +4,8 @@ Verified 8 November 2026. The redesigned site runs at **http://127.0.0.1:5173** 
 
 The original verification snapshot below predates the optional operational dataset. The subsequent [local practice data installation and verification](LOCAL_PRACTICE_DATA.md) adds saved orders, riders, returns and relay scenarios; it does not replace the frozen release evidence.
 
+The later [complete signed-PDF review](ADMIN_SIGNED_PDF_REVIEW.md) records the additional admin workflows and their current verification; the checks below remain the earlier redesign snapshot.
+
 ## Result
 
 - Separate branded sign-in; no sidebar, internal navigation or records until the normal server session is verified. Existing staff phone approval, email fallback and configured Google sign-in remain available.

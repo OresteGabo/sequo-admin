@@ -1,0 +1,13 @@
+{
+  "tests": 663,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "suites": 151,
+  "freshPostgreSQLMigration": {
+    "tests": "1",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0"
+  }
+}

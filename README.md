@@ -30,6 +30,8 @@ Recommended additions:
 
 ## Current workspace
 
+The [complete signed-PDF admin review](docs/ADMIN_SIGNED_PDF_REVIEW.md) covers all 13 pages and 153 numbered points, including the added registration, media, relay and delivery-pricing controls.
+
 Open the isolated passwordless workspace with `npm run dev:local`. See [redesign and verification](docs/ADMIN_REDESIGN_VERIFICATION.md), [service controls](docs/ADMIN_CONTROL_INVENTORY.md), and [remaining services/decisions](docs/APP_OPERATIONS_REVIEW.md).
 
 ## Important Docs
