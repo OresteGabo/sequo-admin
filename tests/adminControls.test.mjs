@@ -81,7 +81,7 @@ test('merchant, dispatch, relay and cooperative mutations use their actual serve
   })
 })
 
-test('unsupported provider, tariff, native media and generic nested editing do not send requests', async () => {
+test('unsupported provider, unapproved tariff, incomplete media lookup and generic nested editing do not send requests', async () => {
   let calls = 0
   const request = async () => { calls++; throw new Error('Must not send') }
   for (const id of ['provider-money-actions', 'catalog-media']) {
@@ -242,4 +242,20 @@ test('administrator bargaining oversight is read-only and uses redacted admin ro
   let calls = 0
   await assert.rejects(runAdminControlAction(control.id, 'counteroffer', { threadId: 'thread', amountCfa: 1 }, async () => { calls++; return {} }), /not supported/)
   assert.equal(calls, 0)
+})
+
+
+test('approved delivery tariff edits preserve the exact revision and exclude client actor or effective-time overrides', () => {
+  const value = { minimumDeliveryFeeCfa: 400, extraKmFeeCfa: 100, includedKm: 5,
+    approvalReference: 'Approved tariff record', reason: 'Confirmed by SEQUO', expectedRevision: 'exact-server-revision',
+    idempotencyKey: 'tariff-reviewed-key', actorUserId: 'forged', effectiveFrom: '2000-01-01', active: true }
+  const built = buildAdminControlRequest('delivery-price-management', 'set-prices', value)
+  assert.equal(built.path, '/api/admin/web/delivery-pricing/manage')
+  assert.equal(built.body.expectedRevision, value.expectedRevision)
+  assert.equal(built.body.idempotencyKey, value.idempotencyKey)
+  assert.equal(built.body.actorUserId, undefined)
+  assert.equal(built.body.effectiveFrom, undefined)
+  assert.equal(built.body.active, undefined)
+  assert.throws(() => buildAdminControlRequest('delivery-price-management', 'set-prices', { ...value, approvalReference: '' }), /approval reference.*required/i)
+  assert.throws(() => buildAdminControlRequest('delivery-price-management', 'set-prices', { ...value, includedKm: 1.5 }), /whole|integer|number|range/i)
 })

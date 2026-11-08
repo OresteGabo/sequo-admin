@@ -391,6 +391,7 @@ async function confirmAction() {
       uncertain.value = true;
     } else {
       clearPending();
+      uncertain.value = false;
       completed.value = true;
       notice.value = response.readback
         ? "Action confirmed and current server records refreshed."
