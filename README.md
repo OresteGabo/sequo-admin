@@ -28,6 +28,10 @@ Recommended additions:
 - A chart library
 - Safe validation before important actions
 
+## Current workspace
+
+Open the isolated passwordless workspace with `npm run dev:local`. See [redesign and verification](docs/ADMIN_REDESIGN_VERIFICATION.md), [service controls](docs/ADMIN_CONTROL_INVENTORY.md), and [remaining services/decisions](docs/APP_OPERATIONS_REVIEW.md).
+
 ## Important Docs
 
 - [AI_CONTEXT.md](AI_CONTEXT.md): AI/developer context for this admin app.

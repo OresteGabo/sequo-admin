@@ -1,0 +1,268 @@
+{
+  "fixture": "ISOLATED_LOCAL_API",
+  "results": [
+    {
+      "id": "catalog-products",
+      "state": "READ_PASS",
+      "rows": 2
+    },
+    {
+      "id": "order-detail",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "couriers",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "courier-detail",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "relay-site-management",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "relay-logical-slots",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "relay-site-detail",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "users",
+      "state": "READ_PASS",
+      "rows": 1
+    },
+    {
+      "id": "user-access-management",
+      "state": "READ_PASS",
+      "rows": 1
+    },
+    {
+      "id": "merchant-memberships",
+      "state": "READ_PASS",
+      "rows": 1
+    },
+    {
+      "id": "merchants",
+      "state": "READ_PASS",
+      "rows": 6
+    },
+    {
+      "id": "merchant-store-settings",
+      "state": "READ_PASS",
+      "rows": 1
+    },
+    {
+      "id": "catalog-customizations",
+      "state": "READ_PASS",
+      "rows": 2
+    },
+    {
+      "id": "catalog-media",
+      "state": "DEPENDENCY",
+      "reason": "Camera upload and generic-image selection currently require an authorized merchant membership on merchant-scoped endpoints. Administrators cannot fabricate camera verification or upload on behalf of a merchant through the current API."
+    },
+    {
+      "id": "orders",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "merchant-orders",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "merchant-order-detail",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "merchant-escalations",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "delivery-overview",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "delivery-missions",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "delivery-mission-detail",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "delivery-admin-history",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "courier-admin-history",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "delivery-resolutions",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "courier-availability",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "courier-enrollment",
+      "state": "DEPENDENCY",
+      "reason": "There is no admin rider-account creation endpoint. Workforce edits apply only to existing rider records and must not rewrite historical mission or earnings snapshots."
+    },
+    {
+      "id": "relay-sites",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "relay-parcels",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "relay-parcel-detail",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "relay-overdue",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "relay-fees",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "relay-pickup-proof",
+      "state": "DEPENDENCY",
+      "reason": "The scoped operator pickup flow requires the actual one-time code or QR and identity-match confirmation. Use the existing dedicated relay pickup surface; code issuance or release is not replaced with an unchecked admin toggle."
+    },
+    {
+      "id": "returns",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "return-detail",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "payment-checkouts",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "payment-events",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "merchant-payout-queue",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "merchant-payouts",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "payout-eligibility",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "payment-providers",
+      "state": "READ_PASS",
+      "rows": 2
+    },
+    {
+      "id": "provider-money-actions",
+      "state": "DEPENDENCY",
+      "reason": "Provider refund and payout adapters are not integrated. A persisted refund instruction or payable is not proof of funds sent. Approved provider specifications, account binding, credentials and sandbox verification are required."
+    },
+    {
+      "id": "commission-policy",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "negotiation-oversight",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "negotiation-detail",
+      "state": "NO_MATCHING_LOCAL_RECORD"
+    },
+    {
+      "id": "cooperatives",
+      "state": "READ_PASS",
+      "rows": 1
+    },
+    {
+      "id": "consolidations",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "subscription-plans",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "benefit-activation",
+      "state": "DEPENDENCY",
+      "reason": "There is no admin activation or benefit-award API. SEQUO must approve the policy and payment/tenure evidence; authorized operations applies the documented server process. A customer cannot grant benefits or cash out referral credit."
+    },
+    {
+      "id": "notification-inbox",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "notification-broadcast",
+      "state": "DEPENDENCY",
+      "reason": "There is no arbitrary admin broadcast or SMS/push-provider configuration endpoint. Device registration and notification preferences remain account-owned; provider credentials belong in approved deployment configuration."
+    },
+    {
+      "id": "notification-outbox",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "account-deletion-requests",
+      "state": "READ_PASS",
+      "rows": 0
+    },
+    {
+      "id": "operations-monitoring",
+      "state": "READ_PASS",
+      "rows": 1
+    },
+    {
+      "id": "delivery-pricing",
+      "state": "READ_PASS",
+      "rows": 1
+    },
+    {
+      "id": "business-parameters",
+      "state": "READ_PASS",
+      "rows": 10
+    }
+  ],
+  "reviewDate": "2026-11-08",
+  "apiRevision": "837c0e8a0763672811f11662291ebd1271cf6581",
+  "adminCodeRevision": "1130d2036f18ef7881e3dc5e58d907043eecc7aa",
+  "scope": "Authenticated isolated loopback API. No real provider calls or staged paid orders. Counts reflect this local database only.",
+  "vendorRevision": "10848993ec3e2db9467fd2241804eb79392f7f78"
+}
