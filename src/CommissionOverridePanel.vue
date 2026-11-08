@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { referenceText, referenceField } from "./adminReferences";
+import AdminReferenceInput from './AdminReferenceInput.vue'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { commissionIntentRecorded, commissionWritesSupported, createCommissionIntent, readCommission, validMerchantId, writeCommissionIntent, type CommissionIntent, type CommissionRead, type CommissionRequest } from './commissionOverrides'
-const props = defineProps<{ request: CommissionRequest; actorId: string }>()
+const props = defineProps<{ request: import('./adminControls').AdminControlRequest; actorId: string }>()
 const emit = defineEmits<{ changed: [] }>()
 const storageKey = `sequo_commission_pending:${props.actorId}`
 const merchantId = ref(''); const percent = ref(''); const reason = ref('')
@@ -73,19 +75,19 @@ onMounted(() => { if (pending.value) { merchantId.value = pending.value.merchant
   <section class="commission-override" aria-label="Merchant commission editor">
     <h3>Merchant commission editor</h3>
     <p>Changes affect future commission calculations. Existing order and settlement snapshots retain their recorded rates. Category commission rules are not configured here.</p>
-    <form class="filter-row" @submit.prevent="refresh"><label>Merchant ID<input v-model="merchantId" maxlength="128" required autocomplete="off" :disabled="busy || Boolean(pending) || Boolean(preview)" /></label><button class="secondary" type="submit" :disabled="busy || !merchantId.trim() || Boolean(preview)">{{ busy ? 'Reading or saving…' : 'Read current commission' }}</button></form>
+    <form class="filter-row" @submit.prevent="refresh"><label>Merchant reference<AdminReferenceInput v-model="merchantId" :field="referenceField('merchantId', 'Merchant reference')" :request="request" :disabled="busy || Boolean(pending) || Boolean(preview)" /></label><button class="secondary" type="submit" :disabled="busy || !merchantId.trim() || Boolean(preview)">{{ busy ? 'Reading or saving…' : 'Read current commission' }}</button></form>
     <p v-if="error" class="error-text" role="alert">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
     <aside v-if="pending" class="commission-card">
-      <h4>Saved {{ pending.action === 'SET' ? 'override' : 'reset' }} intent for {{ pending.merchantId }}</h4>
+      <h4>Saved {{ pending.action === 'SET' ? 'override' : 'reset' }} intent for {{ current ? referenceText(current, 'merchantId') : 'Saved merchant' }}</h4>
       <p>{{ rate(pending.beforeRateBps) }} → {{ rate(pending.afterRateBps) }} · {{ pending.body.reason }}</p>
       <p>The saved request and retry key remain unchanged until the server audit confirms this operation.</p>
       <button type="button" :disabled="busy" @click="submit">Retry saved commission change</button>
       <button v-if="current && !stale" class="secondary" type="button" :disabled="busy" @click="revise">Discard saved intent after review</button>
     </aside>
     <article v-if="current" class="commission-card">
-      <h4>{{ current.merchantId }} · Effective {{ rate(current.commissionRateBps) }}</h4>
+      <h4>{{ referenceText(current, 'merchantId') }} · Effective {{ rate(current.commissionRateBps) }}</h4>
       <p>Source: {{ current.override ? 'Merchant override' : 'Server default' }} · Default {{ rate(current.defaultRateBps) }} · Allowed {{ rate(current.minRateBps) }}–{{ rate(current.maxRateBps) }}</p>
-      <p v-if="current.override">Last override: {{ current.override.updatedByUserId }} · {{ timestamp(current.override.updatedAt) }} · {{ current.override.reason ?? 'No reason recorded' }}</p>
+      <p v-if="current.override">Last override: {{ referenceText(current.override, 'updatedByUserId') }} · {{ timestamp(current.override.updatedAt) }} · {{ current.override.reason ?? 'No reason recorded' }}</p>
       <p v-if="!commissionWritesSupported(current)" class="error-text">Policy, revision or history metadata is unavailable. This record remains read-only.</p>
       <form @submit.prevent="prepare('SET')">
         <label>Proposed commission (%)<input v-model="percent" inputmode="decimal" required :disabled="busy || stale || Boolean(pending) || Boolean(preview) || !commissionWritesSupported(current)" /></label>
@@ -94,11 +96,11 @@ onMounted(() => { if (pending.value) { merchantId.value = pending.value.merchant
         <button class="secondary" type="button" :disabled="busy || stale || Boolean(pending) || Boolean(preview) || !current.override || !commissionWritesSupported(current) || !reason.trim()" @click="prepare('RESET')">Review reset to default</button>
       </form>
       <h4>Server commission history</h4><p v-if="!current.history?.length">No historical changes recorded. Older override details do not imply a complete audit history.</p>
-      <ul><li v-for="entry in current.history ?? []" :key="entry.id"><strong>{{ entry.action }} · {{ rate(entry.beforeRateBps) }} → {{ rate(entry.afterRateBps) }}</strong><p>{{ entry.actorUserId ?? 'Actor unavailable' }} · {{ timestamp(entry.createdAt) }} · {{ entry.reason ?? 'No reason recorded' }}</p><p>{{ entry.id }}</p></li></ul>
+      <ul><li v-for="entry in current.history ?? []" :key="entry.id"><strong>{{ entry.action }} · {{ rate(entry.beforeRateBps) }} → {{ rate(entry.afterRateBps) }}</strong><p>{{ referenceText(entry, 'actorUserId') }} · {{ timestamp(entry.createdAt) }} · {{ entry.reason ?? 'No reason recorded' }}</p></li></ul>
     </article>
     <aside v-if="preview" class="commission-card" role="region" aria-label="Confirm commission change">
       <h4>Confirm {{ preview.action === 'SET' ? 'merchant override' : 'reset to server default' }}</h4>
-      <p>Merchant {{ preview.merchantId }} · {{ rate(preview.beforeRateBps) }} → {{ rate(preview.afterRateBps) }}</p><p>Reason: {{ preview.body.reason }}</p>
+      <p>Merchant {{ referenceText(current, 'merchantId') }} · {{ rate(preview.beforeRateBps) }} → {{ rate(preview.afterRateBps) }}</p><p>Reason: {{ preview.body.reason }}</p>
       <p>The server will reject a stale revision. Existing order snapshots retain their recorded rates.</p>
       <button type="button" :disabled="busy" @click="submit">Confirm commission change</button><button class="secondary" type="button" :disabled="busy" @click="preview = null">Cancel change</button>
     </aside>

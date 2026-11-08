@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { referenceText } from "./adminReferences";
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import type { AdminControlRequest, AdminControlField } from './adminControls.ts'
 import AdminReferenceInput from './AdminReferenceInput.vue'
@@ -133,7 +134,7 @@ async function reviewUncertain() { pending.value = null; await load() }
       <div v-else><label>Standard product image (JPEG, up to 8 MiB)<input type="file" accept="image/jpeg,.jpg,.jpeg" :disabled="busy || !!pending" @change="chooseGeneric" /></label><label class="generic-approval"><input v-model="genericApproved" type="checkbox" :disabled="busy || !!pending || !genericFile" />I approve this generic image for this standard product on behalf of SEQUO.</label><p v-if="!state.approvedGenericImageUrl">No preset generic image is configured. You can explicitly approve and upload a standard product image here.</p></div>
       <label>Reason for change<textarea v-model="reason" maxlength="1000" :disabled="busy || !!pending" /></label>
       <div class="media-actions"><button v-if="state.product.kind === 'SellerSpecific'" :disabled="busy || !!pending || !capture || !reason.trim()" @click="act('camera')">Upload captured photo</button><template v-else><button :disabled="busy || !!pending || !genericFile || !genericApproved || !reason.trim()" @click="act('generic-file')">Approve and upload generic image</button><button v-if="state.approvedGenericImageUrl" :disabled="busy || !!pending || !reason.trim()" @click="act('generic')">Use preset approved image</button></template><button :disabled="busy || !!pending || !reason.trim() || state.product.status === 'ACTIVE'" @click="act('ACTIVE')">Publish product</button><button :disabled="busy || !!pending || !reason.trim() || state.product.status !== 'ACTIVE'" @click="act('INACTIVE')">Deactivate product</button></div>
-      <details><summary>Recorded media and publication history ({{ state.history.length }})</summary><ul><li v-for="event in state.history" :key="event.id">{{ event.createdAt }} · {{ event.action }} · {{ event.actorUserId }} — {{ event.reason }}</li></ul><p v-if="!state.history.length">No new media audit events. Existing legacy photos are retained.</p></details>
+      <details><summary>Recorded media and publication history ({{ state.history.length }})</summary><ul><li v-for="event in state.history" :key="event.id">{{ event.createdAt }} · {{ event.action }} · {{ referenceText(event, 'actorUserId') }} — {{ event.reason }}</li></ul><p v-if="!state.history.length">No new media audit events. Existing legacy photos are retained.</p></details>
     </div>
   </section>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { referenceText, clearAdminReferenceCache, referenceSearchQuery } from "./adminReferences";
 import {
   computed,
   nextTick,
@@ -18,6 +19,7 @@ import ReturnOperationsPanel from "./ReturnOperationsPanel.vue";
 import FinanceLedgerPanel from "./FinanceLedgerPanel.vue";
 import PaymentInvestigationPanel from "./PaymentInvestigationPanel.vue";
 import CommissionOverridePanel from "./CommissionOverridePanel.vue";
+import AdminReferenceInput from "./AdminReferenceInput.vue";
 import AdminIcon from "./AdminIcon.vue";
 import OperationsControlPanel from "./OperationsControlPanel.vue";
 import LocalFixtureGuide from "./LocalFixtureGuide.vue";
@@ -235,6 +237,7 @@ const email = ref("");
 const accessToken = ref("");
 const refreshToken = ref("");
 const currentUser = ref<CurrentUser | null>(null);
+watch(() => currentUser.value?.id, () => clearAdminReferenceCache(), { flush: "sync" });
 const authError = ref("");
 const authNotice = ref("");
 const authLoading = ref(false);
@@ -604,7 +607,7 @@ const roleOptions: Array<"ALL" | RoleCode> = [
 ];
 const displayedUsers = computed(() => {
   const source = adminUsers.value;
-  const query = userSearch.value.trim().toLowerCase();
+  const query = referenceSearchQuery(userSearch.value);
   return source
     .filter(
       (user) =>
@@ -618,6 +621,7 @@ const displayedUsers = computed(() => {
         user.phoneNumber,
         user.displayName,
         user.id,
+        referenceText(user),
         user.provider,
         user.status,
         user.roles.join(" "),
@@ -628,11 +632,13 @@ const displayedUsers = computed(() => {
 });
 const displayedMerchants = computed(() => {
   const source = adminMerchants.value;
-  const query = merchantSearch.value.trim().toLowerCase();
+  const query = referenceSearchQuery(merchantSearch.value);
   return source.filter((merchant) => {
     if (!query) return true;
     return [
       merchant.id,
+      referenceText(merchant),
+      referenceText(merchant, "ownerUserId"),
       merchant.name,
       merchant.status,
       merchant.walletProvider,
@@ -652,11 +658,13 @@ const selectedMerchant = computed(
 );
 const displayedOrders = computed(() => {
   const source = adminOrders.value;
-  const query = orderSearch.value.trim().toLowerCase();
+  const query = referenceSearchQuery(orderSearch.value);
   return source.filter((order) => {
     if (!query) return true;
     return [
       order.id,
+      referenceText(order),
+      referenceText(order, "customerId"),
       order.customerId,
       order.serviceLevel,
       order.route,
@@ -2533,7 +2541,7 @@ function onWorkspaceLocation() {
                 <tbody>
                   <tr v-for="order in recentOrders" :key="order.id">
                     <td>
-                      <strong class="record-id">{{ order.id }}</strong
+                      <strong class="record-id">{{ referenceText(order) }}</strong
                       ><small>{{ formatTimestamp(order.createdAt) }}</small>
                     </td>
                     <td>
@@ -2651,7 +2659,7 @@ function onWorkspaceLocation() {
                     user.phoneNumber ||
                     user.id
                   }}</strong>
-                  <small>{{ user.email || user.phoneNumber || user.id }}</small>
+                  <small>{{ user.email || user.phoneNumber || referenceText(user) }}</small>
                 </span>
                 <span role="cell"
                   ><span class="status-pill">{{
@@ -2728,7 +2736,7 @@ function onWorkspaceLocation() {
                 >
                   <span>
                     <strong>{{ merchant.name }}</strong>
-                    <small>{{ merchant.id }}</small>
+                    <small>{{ referenceText(merchant) }}</small>
                   </span>
                   <span
                     >{{ (merchant.commissionRateBps / 100).toFixed(2) }}%</span
@@ -2767,7 +2775,7 @@ function onWorkspaceLocation() {
                   <div>
                     <dt>Owner</dt>
                     <dd>
-                      {{ selectedMerchant.ownerUserId || "Not available" }}
+                      {{ referenceText(selectedMerchant, "ownerUserId") }}
                     </dd>
                   </div>
                   <div>
@@ -2826,9 +2834,9 @@ function onWorkspaceLocation() {
                   @click="selectedOrderId = order.id"
                 >
                   <span>
-                    <strong>{{ order.id }}</strong>
+                    <strong>{{ referenceText(order) }}</strong>
                     <small
-                      >{{ order.customerId }} ·
+                      >{{ referenceText(order, "customerId") }} ·
                       {{ humanize(order.route) }}</small
                     >
                   </span>
@@ -2914,8 +2922,8 @@ function onWorkspaceLocation() {
               @submit.prevent="preparePolicyAssignment"
             >
               <label
-                >Mission ID<input
-                  v-model="assignmentMissionId"
+                >Mission reference<AdminReferenceInput
+                  v-model="assignmentMissionId" :field="{ name: 'missionId', label: 'Mission reference', type: 'string', location: 'body', required: true }" :request="apiRequest"
                   required
                   maxlength="128"
                   autocomplete="off"

@@ -1,11 +1,12 @@
+import { isValidReference, type PublicReferenceKind } from "./humanReference.ts"
 import type { AdminControlRequest } from './adminControls'
 
 export type EnrollmentKind = 'merchant' | 'courier'
-export type EnrollmentOperation = { id: string; kind: 'MERCHANT' | 'COURIER'; userId: string; entityId: string; actorUserId: string; reason: string; idempotencyKey: string; createdAt: string; recordedName: string | null; workforceType: string | null; vehicleType: string | null }
+export type EnrollmentOperation = { actorReference?: string; entityReference?: string; userReference?: string; id: string; kind: 'MERCHANT' | 'COURIER'; userId: string; entityId: string; actorUserId: string; reason: string; idempotencyKey: string; createdAt: string; recordedName: string | null; workforceType: string | null; vehicleType: string | null }
 export type EnrollmentSnapshot = {
-  user: { id: string; email: string | null; displayName: string | null; active: boolean; status: string; roles: string[]; updatedAt: string }
-  merchants: { id: string; name: string; status: string; createdAt: string; updatedAt: string }[]
-  courier: { id: string; status: string; workforceType: string | null; vehicleType: string | null; createdAt: string; updatedAt: string } | null
+  user: { publicReference?: string; id: string; email: string | null; displayName: string | null; active: boolean; status: string; roles: string[]; updatedAt: string }
+  merchants: { publicReference?: string; id: string; name: string; status: string; createdAt: string; updatedAt: string }[]
+  courier: { publicReference?: string; id: string; status: string; workforceType: string | null; vehicleType: string | null; createdAt: string; updatedAt: string } | null
   history: EnrollmentOperation[]
 }
 export type EnrollmentDraft = { userId: string; name: string; workforceType: string; vehicleType: string; reason: string }
@@ -22,14 +23,14 @@ const workforces = ['SequoSalaried', 'Freelancer']
 export function parseEnrollmentSnapshot(value: unknown, expectedUserId: string): EnrollmentSnapshot {
   const data = record(value), u = record(data.user)
   if (id(u.id) !== expectedUserId || typeof u.active !== 'boolean') throw Error('The server returned another account. Refresh before continuing.')
-  const user = { id: id(u.id), email: nullable(u.email), displayName: nullable(u.displayName), active: u.active, status: text(u.status), roles: array(u.roles).map(role => text(role, 32)), updatedAt: date(u.updatedAt) }
-  const merchants = array(data.merchants).map(value => { const m = record(value); return { id: id(m.id), name: text(m.name, 160), status: text(m.status), createdAt: date(m.createdAt), updatedAt: date(m.updatedAt) } })
+  const user = { ...referenceFields(u, { publicReference: "USER" }), id: id(u.id), email: nullable(u.email), displayName: nullable(u.displayName), active: u.active, status: text(u.status), roles: array(u.roles).map(role => text(role, 32)), updatedAt: date(u.updatedAt) }
+  const merchants = array(data.merchants).map(value => { const m = record(value); return { ...referenceFields(m, { publicReference: "MERCHANT" }), id: id(m.id), name: text(m.name, 160), status: text(m.status), createdAt: date(m.createdAt), updatedAt: date(m.updatedAt) } })
   const c = data.courier === null ? null : record(data.courier)
-  const courier = c ? { id: id(c.id), status: text(c.status), workforceType: nullable(c.workforceType), vehicleType: nullable(c.vehicleType), createdAt: date(c.createdAt), updatedAt: date(c.updatedAt) } : null
+  const courier = c ? { ...referenceFields(c, { publicReference: "COURIER" }), id: id(c.id), status: text(c.status), workforceType: nullable(c.workforceType), vehicleType: nullable(c.vehicleType), createdAt: date(c.createdAt), updatedAt: date(c.updatedAt) } : null
   const history = array(data.history).map(value => {
     const h = record(value)
     if (!['MERCHANT', 'COURIER'].includes(String(h.kind)) || id(h.userId) !== expectedUserId) throw Error('Enrollment history is unavailable.')
-    return { id: id(h.id), kind: h.kind as 'MERCHANT' | 'COURIER', userId: id(h.userId), entityId: id(h.entityId), actorUserId: id(h.actorUserId), reason: text(h.reason, 1000), idempotencyKey: id(h.idempotencyKey), createdAt: date(h.createdAt), recordedName: nullable(h.recordedName), workforceType: nullable(h.workforceType), vehicleType: nullable(h.vehicleType) }
+    return { ...referenceFields(h, { actorReference: "USER", userReference: "USER", entityReference: h.kind === "MERCHANT" ? "MERCHANT" : "COURIER" }), id: id(h.id), kind: h.kind as 'MERCHANT' | 'COURIER', userId: id(h.userId), entityId: id(h.entityId), actorUserId: id(h.actorUserId), reason: text(h.reason, 1000), idempotencyKey: id(h.idempotencyKey), createdAt: date(h.createdAt), recordedName: nullable(h.recordedName), workforceType: nullable(h.workforceType), vehicleType: nullable(h.vehicleType) }
   })
   return { user, merchants, courier, history }
 }
@@ -80,3 +81,5 @@ export async function submitEnrollment(request: AdminControlRequest, intent: Enr
   if (!operation) throw Error('The enrollment acknowledgement is not confirmed by server history. Refresh or review the exact saved retry.')
   return { snapshot: after, operation }
 }
+
+function referenceFields(row: Record<string, unknown>, fields: Record<string, PublicReferenceKind>): Record<string, string> { return Object.fromEntries(Object.entries(fields).flatMap(([field, kind]) => typeof row[field] === "string" && isValidReference(row[field], kind) ? [[field, row[field] as string]] : [])); }

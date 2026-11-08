@@ -59,13 +59,13 @@ test('deliveries expose recorded amounts including salaried zero without asserti
 })
 
 test('stored accrual split and frozen commission remain distinct from a later merchant override', async () => {
-  const payments = await readAdminSection('payments', async () => ({merchantPayouts:[{id:'payout-1',merchantId:'merchant-1',orderId:'order-1',sourceOrderItemId:'sub-1',merchantNetCfa:3400,commissionCfa:600,platformMarginCfa:0,status:'HeldReturnWindow',activeReturnHold:true,activeDisputeHold:false}],webhookEvents:[]}))
-  assert.match(payments[0].rows[0].cells[0], /Source sub-1/)
+  const payments = await readAdminSection('payments', async () => ({merchantPayouts:[{id:'payout-1',merchantId:'merchant-1',orderId:'order-1',sourceOrderItemId:'sub-1',publicReference:'F00-000-09J',merchantReference:'VAB-CDE-FVD',orderReference:'C12-345-6E6',merchantOrderReference:'MAB-CDE-FJZ',merchantNetCfa:3400,commissionCfa:600,platformMarginCfa:0,status:'HeldReturnWindow',activeReturnHold:true,activeDisputeHold:false}],webhookEvents:[]}))
+  assert.match(payments[0].rows[0].cells[0], /Source MAB-CDE-FJZ/)
   assert.match(payments[0].rows[0].cells[1], /Net 3,400 CFA · Commission 600 CFA · Margin 0 CFA/)
   assert.match(payments[0].rows[0].cells[2], /Return hold/)
-  const current = await readAdminSection('commissions', async () => ({defaultRateBps:1500,overrides:[{merchantId:'merchant-1',commissionRateBps:1000,reason:'Later approved override',updatedByUserId:'admin-1',updatedAt:'2026-11-08T13:00:00Z'}]}))
+  const current = await readAdminSection('commissions', async () => ({defaultRateBps:1500,overrides:[{merchantId:'merchant-1',commissionRateBps:1000,reason:'Later approved override',updatedByUserId:'admin-1',actorReference:'A12-345-6BJ',updatedAt:'2026-11-08T13:00:00Z'}]}))
   assert.equal(current[0].rows[0].cells[1], '10.00%')
-  assert.match(current[0].rows[0].cells[2], /admin-1/)
+  assert.match(current[0].rows[0].cells[2], /A12-345-6BJ/)
   const frozen = await readFinanceSource('OrderItem','sub-1',async path => path.startsWith('/api/merchant/') ? snapshot : [])
   assert.equal(frozen.snapshot.commissionRateBps,1500)
   assert.equal(frozen.snapshot.commissionCfa,600)

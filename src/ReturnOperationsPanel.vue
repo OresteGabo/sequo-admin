@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { referenceText, referenceField } from "./adminReferences";
+import AdminReferenceInput from './AdminReferenceInput.vue'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { canRecordRefundInstruction, refundInstructionConfirmed, refundInstructionState } from './refundInstructionState'
 
-type Request = <T>(path: string, retryAfterRefresh?: boolean, method?: 'GET' | 'POST', body?: unknown) => Promise<T>
+type Request = import('./adminControls').AdminControlRequest
 type Action = 'collection' | 'receipt' | 'inspection' | 'refund'
 type History = { action: string; actorUserId: string | null; metadata: string | null; createdAt: string }
 type ReturnRecord = {
@@ -102,7 +104,7 @@ async function mutate(action: Action, body?: Record<string, string | number>) {
   if (!pending.value && (!detail || stale.value || !body)) return
   if (!pending.value && action === 'refund' && (!detail || !canRecordRefundInstruction(detail))) return
   if (!pending.value) {
-    const target = `Return ${requireId(detail)} · Order ${detail?.orderId}`
+    const target = `Return ${referenceText(detail)} · Order ${referenceText(detail, "orderId")}`
     const confirmation = action === 'refund'
       ? `Record a refund instruction of ${Number(body?.amountCfa).toLocaleString('en-US')} CFA?\n${target}\nThis records an instruction only; no provider transfer is executed.`
       : action === 'inspection'
@@ -143,26 +145,26 @@ onMounted(() => { void run(() => readback(pending.value?.returnId ?? props.initi
     <p v-if="error" class="error-text" role="alert">{{ error }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <aside v-if="pending" class="return-card">
-      <strong>Unconfirmed {{ pending.action }} action for {{ pending.returnId }}</strong>
+      <strong>Unconfirmed {{ pending.action }} action for {{ selected ? referenceText(selected) : 'Saved return' }}</strong>
       <p>The saved action and its retry key are retained until server readback. Inputs remain unchanged on retry.</p>
       <button type="button" :disabled="busy" @click="mutate(pending.action)">Retry saved action</button>
       <button v-if="mayRevise" class="secondary" type="button" :disabled="busy || stale" @click="revise">Revise after server refresh</button>
     </aside>
     <label>Return queue<select v-model="filter" :disabled="busy" @change="refresh"><option value="ALL">All returns</option><option v-for="status in statuses" :key="status" :value="status">{{ label(status) }}</option></select></label>
-    <form @submit.prevent="open(lookupId.trim())"><label>Return ID<input v-model="lookupId" maxlength="128" required autocomplete="off" :disabled="busy || Boolean(pending)" /></label><button class="secondary" type="submit" :disabled="busy || !lookupId.trim() || Boolean(pending)">Load return</button></form>
+    <form @submit.prevent="open(lookupId.trim())"><label>Return reference<AdminReferenceInput v-model="lookupId" :field="referenceField('returnId', 'Return reference')" :request="request" :disabled="busy || Boolean(pending)" /></label><button class="secondary" type="submit" :disabled="busy || !lookupId.trim() || Boolean(pending)">Load return</button></form>
     <p v-if="!busy && !rows.length">No returns in this queue.</p>
-    <ul><li v-for="row in rows" :key="row.id"><button class="secondary" type="button" :disabled="busy || Boolean(pending && pending.returnId !== row.id)" @click="open(row.id)">{{ row.id }} · Order {{ row.orderId }} · {{ label(row.status) }} · {{ money(row.requestedRefundCfa) }}</button></li></ul>
+    <ul><li v-for="row in rows" :key="row.id"><button class="secondary" type="button" :disabled="busy || Boolean(pending && pending.returnId !== row.id)" @click="open(row.id)">{{ referenceText(row) }} · Order {{ referenceText(row, 'orderId') }} · {{ label(row.status) }} · {{ money(row.requestedRefundCfa) }}</button></li></ul>
     <article v-if="selected" class="return-card">
-      <h4>{{ selected.id }} · {{ label(selected.status) }}</h4>
-      <p>Order {{ selected.orderId }} · {{ selected.reason }}</p>
+      <h4>{{ referenceText(selected) }} · {{ label(selected.status) }}</h4>
+      <p>Order {{ referenceText(selected, 'orderId') }} · {{ selected.reason }}</p>
       <dl>
         <dt>Requested</dt><dd>{{ timestamp(selected.requestedAt) }}</dd>
-        <dt>Relay drop-off</dt><dd>{{ selected.relayPointId ?? 'No relay drop-off recorded' }} · {{ timestamp(selected.droppedAt) }}</dd>
-        <dt>SEQUO collection</dt><dd>{{ timestamp(selected.collectedBySequoAt) }} · {{ selected.collectingOperatorId ?? 'Actor unavailable' }}<span v-if="selected.collectionMetadata"> · {{ selected.collectionMetadata }}</span></dd>
-        <dt>Physical receipt</dt><dd>{{ timestamp(selected.receivedBySequoAt) }} · {{ selected.receivingOperatorId ?? 'Not received' }}</dd>
-        <dt>Condition decision</dt><dd>{{ selected.inspectionDecision ? label(selected.inspectionDecision) : 'Inspection pending' }} · {{ timestamp(selected.inspectedAt) }} · {{ selected.inspectingOperatorId ?? 'Not inspected' }} · {{ selected.conditionAssessment ?? 'Not assessed' }} · {{ selected.responsibility ?? 'Responsibility not recorded' }}</dd>
+        <dt>Relay drop-off</dt><dd>{{ referenceText(selected, 'relayPointId') }} · {{ timestamp(selected.droppedAt) }}</dd>
+        <dt>SEQUO collection</dt><dd>{{ timestamp(selected.collectedBySequoAt) }} · {{ referenceText(selected, 'collectingOperatorId') }}<span v-if="selected.collectionMetadata"> · {{ selected.collectionMetadata }}</span></dd>
+        <dt>Physical receipt</dt><dd>{{ timestamp(selected.receivedBySequoAt) }} · {{ referenceText(selected, 'receivingOperatorId') }}</dd>
+        <dt>Condition decision</dt><dd>{{ selected.inspectionDecision ? label(selected.inspectionDecision) : 'Inspection pending' }} · {{ timestamp(selected.inspectedAt) }} · {{ referenceText(selected, 'inspectingOperatorId') }} · {{ selected.conditionAssessment ?? 'Not assessed' }} · {{ selected.responsibility ?? 'Responsibility not recorded' }}</dd>
         <dt>Refund instruction</dt>
-        <dd v-if="refundInstructionState(selected) === 'REQUESTED' && selected.refundInstruction">{{ label(selected.refundInstruction.status) }} · {{ money(selected.refundInstruction.amountCfa) }} · {{ timestamp(selected.refundInstruction.requestedAt) }} · {{ selected.refundInstruction.requestedByUserId ?? 'Actor unavailable' }} · Provider: {{ label(selected.refundInstruction.paymentStatus) }}</dd>
+        <dd v-if="refundInstructionState(selected) === 'REQUESTED' && selected.refundInstruction">{{ label(selected.refundInstruction.status) }} · {{ money(selected.refundInstruction.amountCfa) }} · {{ timestamp(selected.refundInstruction.requestedAt) }} · {{ referenceText(selected.refundInstruction, 'requestedByUserId') }} · Provider: {{ label(selected.refundInstruction.paymentStatus) }}</dd>
         <dd v-else-if="refundInstructionState(selected) === 'REQUESTED'">Instruction recorded; audit details unavailable. Refresh before further action. Provider payment unconfirmed.</dd>
         <dd v-else-if="refundInstructionState(selected) === 'LEGACY_REVIEW_REQUIRED'">Legacy refund requires operator review. No new instruction can be recorded. Provider payment unconfirmed.</dd>
         <dd v-else-if="refundInstructionState(selected) === 'NOT_INSTRUCTED'">Not instructed. Provider payment unconfirmed.</dd>
@@ -186,7 +188,7 @@ onMounted(() => { void run(() => readback(pending.value?.returnId ?? props.initi
         <button type="submit" :disabled="busy || stale || Boolean(pending) || !canRecordRefundInstruction(selected) || selected.status !== 'ReceivedBySequo' || !selected.receivedBySequoAt || selected.inspectionDecision !== 'ACCEPTED' || !selected.conditionAssessment || !selected.responsibility || !Number.isSafeInteger(Number(refundAmount)) || Number(refundAmount) <= 0 || Number(refundAmount) > selected.requestedRefundCfa">Record refund instruction</button>
       </form>
       <h4>Server actor history</h4><p v-if="!selected.history?.length">No actor history available for this legacy record.</p>
-      <ul><li v-for="(entry, index) in selected.history ?? []" :key="index">{{ label(entry.action) }} · {{ entry.actorUserId ?? 'Actor unavailable' }} · {{ timestamp(entry.createdAt) }} · {{ entry.metadata }}</li></ul>
+      <ul><li v-for="(entry, index) in selected.history ?? []" :key="index">{{ label(entry.action) }} · {{ referenceText(entry, 'actorUserId') }} · {{ timestamp(entry.createdAt) }} · {{ entry.metadata }}</li></ul>
     </article>
   </section>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { referenceText, referenceDisplayTree } from "./adminReferences";
 import AdminReferenceInput from './AdminReferenceInput.vue'
 import type { AdminControlField } from './adminControls'
 import { onMounted, onUnmounted, ref } from 'vue'
@@ -47,9 +48,9 @@ function chooseSite() { reason.value = ''; mission.value = null; physicalReceipt
 async function write(action: RelayAction, body?: Record<string, unknown>, slotId?: string) {
   if (!pending.value) {
     if (stale.value || !body) return
-    const preview = action === 'SEQUO_DEPOSIT' ? `Confirm actual SEQUO physical receipt for mission ${mission.value?.id}, order ${mission.value?.orderId}, slot ${depositSlotId.value}?\nRecorded rider pickup must already exist; this does not create a pickup or change assignment.` :
+    const preview = action === 'SEQUO_DEPOSIT' ? `Confirm actual SEQUO physical receipt for mission ${referenceText(mission.value)}, order ${referenceText(mission.value, "orderId")}, slot ${selected.value?.slots.find(item => item.id === depositSlotId.value)?.lockerCode ?? "Selected slot"}?\nRecorded rider pickup must already exist; this does not create a pickup or change assignment.` :
       action === 'CREATE_SITE' ? `Create relay ${name.value} at ${latitude.value}, ${longitude.value}?\nIt remains unavailable for checkout until an operator and free logical slot are configured.` :
-        `${action.replaceAll('_', ' ')} · ${selected.value?.site.name} (${siteId.value})${slotId ? ` · slot ${slotId}` : ''}\nThis records logical storage only; it sends no physical hardware command.`
+        `${action.replaceAll('_', ' ')} · ${selected.value?.site.name} (${referenceText(selected.value?.site)})${slotId ? ` · slot ${selected.value?.slots.find(item => item.id === slotId)?.lockerCode ?? "Selected slot"}` : ''}\nThis records logical storage only; it sends no physical hardware command.`
     const draft = relayIntent(action, props.actorId, action === 'CREATE_SITE' ? null : siteId.value, body, slotId)
     if (!window.confirm(`${preview}\nReason: ${body.reason}`)) return
     save(draft)
@@ -91,7 +92,7 @@ onMounted(() => { if (pending.value) reason.value = String(pending.value.body.re
     <p>Set up relay locations and recorded storage spaces, then record receipt of an eligible delivery. Open relay operations above for pickup and overdue decisions.</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="busy" role="status">Loading server records…</p>
-    <div v-if="pending" class="pending"><strong>Unconfirmed saved action: {{ pending.action }}</strong><p>Target: {{ pending.siteId ?? 'new site' }}. Inputs are frozen until its server result is confirmed.</p><button :disabled="busy" @click="run(() => write(pending!.action))">Retry saved action unchanged</button><button :disabled="busy" @click="discard">Discard local retry after review</button></div>
+    <div v-if="pending" class="pending"><strong>Unconfirmed saved action: {{ pending.action }}</strong><p>Target: {{ selected ? referenceText(selected.site) : 'New site' }}. Inputs are frozen until its server result is confirmed.</p><button :disabled="busy" @click="run(() => write(pending!.action))">Retry saved action unchanged</button><button :disabled="busy" @click="discard">Discard local retry after review</button></div>
     <label>Recorded relay<select v-model="siteId" :disabled="busy || !!pending" @change="chooseSite"><option value="">Choose a site</option><option v-for="site in rows" :key="site.id" :value="site.id">{{ site.name }} · {{ site.status }}</option></select></label>
     <p v-if="!busy && !rows.length">No relay sites are recorded. Create the first site, then assign an existing authorized operator through relay management.</p>
     <button :disabled="busy || !!pending" @click="newSite">Prepare new site</button>
@@ -99,7 +100,7 @@ onMounted(() => { if (pending.value) reason.value = String(pending.value.body.re
       <fieldset :disabled="busy || !!pending || stale"><legend>{{ selected ? 'Recorded site details' : 'New relay site' }}</legend>
         <label>Name<input v-model="name" required maxlength="120"></label><div class="coordinates"><label>Latitude<input v-model="latitude" inputmode="decimal" required></label><label>Longitude<input v-model="longitude" inputmode="decimal" required></label></div>
         <label>City<input v-model="city" maxlength="128"></label><label>Neighborhood<input v-model="neighborhood" maxlength="128"></label><label>Landmark / access instructions<input v-model="landmark" maxlength="500"></label>
-        <p v-if="selected">Operator: {{ selected.site.operatorUserId ?? 'Unassigned — unavailable for checkout' }}. Location cannot be moved once storage slots exist.</p>
+        <p v-if="selected">Operator: {{ selected.site.operatorUserId ? referenceText(selected.site, 'operatorUserId') : 'Unassigned — unavailable for checkout' }}. Location cannot be moved once storage slots exist.</p>
       </fieldset>
       <label>Reason for the next action<textarea v-model="reason" required maxlength="1000" :readonly="!!pending" :disabled="busy"></textarea></label>
       <button :disabled="busy || stale || !!pending || !reason.trim()">{{ selected ? 'Review site update' : 'Review new site' }}</button>
@@ -110,13 +111,13 @@ onMounted(() => { if (pending.value) reason.value = String(pending.value.body.re
       <form @submit.prevent="addSlot"><label>New logical slot code<input v-model="slotCode" maxlength="32" required :disabled="busy || !!pending"></label><button :disabled="busy || stale || !!pending || !reason.trim()">Review new logical slot</button></form>
       <h4>SEQUO physical relay receipt</h4><p>Use an existing relay mission after its assigned rider has recorded pickup. The persisted destination and free slot are verified again by the server.</p>
       <form @submit.prevent="readMission"><label>Mission ID<AdminReferenceInput v-model="missionId" :field="missionField" :request="request" :disabled="busy || !!pending" /></label><button :disabled="busy || !!pending">Read mission from server</button></form>
-      <div v-if="mission"><p>Mission {{ mission.id }} · order {{ mission.orderId }} · {{ mission.status }} · assigned rider {{ mission.courierId ?? 'none' }} · relay {{ mission.relayPointId ?? 'none' }}</p>
+      <div v-if="mission"><p>Mission {{ referenceText(mission) }} · order {{ referenceText(mission, 'orderId') }} · {{ mission.status }} · assigned rider {{ referenceText(mission, 'courierId') }} · relay {{ referenceText(mission, 'relayPointId') }}</p>
         <label>Free logical slot<select v-model="depositSlotId" :disabled="busy || !!pending"><option value="">Choose a slot</option><option v-for="slot in selected.slots.filter(slot => slot.status === 'AVAILABLE')" :key="slot.id" :value="slot.id">{{ slot.lockerCode }}</option></select></label>
         <label><input v-model="physicalReceipt" type="checkbox" :disabled="busy || !!pending"> The package is physically received by SEQUO at this selected relay site</label>
         <button :disabled="busy || stale || !!pending || !reason.trim() || !physicalReceipt || !depositSlotId || mission.status !== 'PICKED_UP_FROM_SELLER' || mission.destinationType !== 'RELAY_POINT' || mission.relayPointId !== siteId" @click="deposit">Review SEQUO receipt and deposit</button>
       </div>
       <h4>Recorded setup and SEQUO actions</h4><p v-if="!selected.history.length">No setup history was recorded for this legacy site.</p>
-      <ol><li v-for="event in selected.history" :key="event.id"><strong>{{ event.action }}</strong> · {{ stamp(event.createdAt) }} · {{ event.actorUserId }}<p>{{ event.reason }}</p><small>{{ event.before }} → {{ event.after }}</small></li></ol>
+      <ol><li v-for="event in selected.history" :key="event.id"><strong>{{ event.action }}</strong> · {{ stamp(event.createdAt) }} · {{ referenceText(event, 'actorUserId') }}<p>{{ event.reason }}</p><small>{{ referenceDisplayTree(event.before) }} → {{ referenceDisplayTree(event.after) }}</small></li></ol>
     </template>
   </section>
 </template>

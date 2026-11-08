@@ -61,7 +61,7 @@ test('number, enum, boolean, required and datetime fields fail closed before tra
   for (const value of [-1, 1.5, 'Infinity', false]) assert.throws(() => buildAdminControlRequest('catalog-products', 'create', { name: 'Rice', basePriceCfa: value }), /range|number/)
   assert.throws(() => buildAdminControlRequest('catalog-products', 'create', { name: 'Rice', kind: 'FOOD' }), /supported choice/)
   assert.throws(() => buildAdminControlRequest('catalog-products', 'edit', { productId: 'p', bargainingEnabled: 'yes' }), /true or false/)
-  assert.throws(() => buildAdminControlRequest('merchant-orders', null), /Merchant ID is required/)
+  assert.throws(() => buildAdminControlRequest('merchant-orders', null), /Merchant reference is required/)
   assert.throws(() => buildAdminControlRequest('courier-availability', 'pause', { courierId: 'c', reason: 'Review', pausedUntil: 'not-a-time' }), /valid date/)
   assert.equal(buildAdminControlRequest('courier-availability', 'pause', { courierId: 'c', reason: 'Review', pausedUntil: '2026-11-08T12:00:00+01:00' }).body.pausedUntil, '2026-11-08T11:00:00.000Z')
 })

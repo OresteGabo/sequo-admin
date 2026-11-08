@@ -1,3 +1,4 @@
+import { hasAdminReference } from './adminReferences.ts'
 import { merchantStoreControl } from './merchantStore.ts'
 
 /** Supported operator contracts only. Authentication and server role/state guards stay authoritative. */
@@ -32,12 +33,12 @@ export type AdminControlActionResult = {
 }
 export type BuiltAdminControlRequest = { path: string; method: AdminControlMethod; body?: Record<string, unknown> }
 
-const idField = (name: string, label: string, location: AdminControlField['location'] = 'path', valueFrom = 'id'): AdminControlField => ({ name, label, location, valueFrom, type: 'string', required: true, maxLength: 128 })
+const idField = (name: string, label: string, location: AdminControlField['location'] = 'path', valueFrom = 'id'): AdminControlField => ({ name, label: label.replace(/\bID\b/g, "reference"), location, valueFrom, type: 'string', required: true, maxLength: 128 })
 const merchantQuery: AdminControlField = { ...idField('merchantId', 'Merchant ID', 'query', 'merchantId'), required: true }
 const bodyText = (name: string, label: string, required = true): AdminControlField => ({ name, label, type: 'string', location: 'body', required, maxLength: 2000 })
 const numeric = (name: string, label: string, location: AdminControlField['location'] = 'body', min = 0, max = 2147483647): AdminControlField => ({ name, label, type: 'number', location, integer: true, min, max, required: true })
 const choice = (name: string, label: string, options: readonly string[], location: AdminControlField['location'] = 'body'): AdminControlField => ({ name, label, options, location, type: 'enum', required: true })
-const cols = (...keys: string[]): AdminControlColumn[] => keys.map(key => ({ key, label: key.split('.').at(-1)!.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()), ...(key.endsWith('Cfa') ? { format: 'money' as const } : key.endsWith('At') ? { format: 'date' as const } : {}) }))
+const cols = (...keys: string[]): AdminControlColumn[] => keys.map(key => ({ key, label: (key.split('.').at(-1)! === 'id' ? 'Reference' : hasAdminReference(key.split('.').at(-1)!) ? key.split('.').at(-1)!.replace(/Id$/, 'Reference') : key.split('.').at(-1)!).replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()), ...(key.endsWith('Cfa') ? { format: 'money' as const } : key.endsWith('At') ? { format: 'date' as const } : {}) }))
 const pageLimit: AdminControlField = { ...numeric('limit', 'Maximum records', 'query', 1, 100), defaultValue: 50 }
 const unavailable = (id: string, group: AdminControlGroup, label: string, reason: string): AdminControlDescriptor => ({ id, group, label, description: reason, supported: false, reason, actions: [] })
 const adminRead = (id: string, group: AdminControlGroup, label: string, path: string, columns: readonly AdminControlColumn[], resultPath?: string, description = 'Authenticated server records. Refresh to read the current persisted state.', rowId = 'id'): AdminControlDescriptor => ({ id, group, label, description, supported: true, read: { path, shape: 'list', rowId, columns, fields: [pageLimit], ...(resultPath ? { resultPath } : {}) }, actions: [] })
@@ -51,7 +52,7 @@ const subOrderId = idField('subOrderId', 'Merchant order ID')
 const keyField: AdminControlField = { ...bodyText('idempotencyKey', 'Stable retry key'), maxLength: 128, description: 'Keep the same key and identical fields if the response is lost.' }
 const custodyFields = [parcelId, { ...bodyText('eventId', 'Unique event ID'), maxLength: 128 }, keyField, bodyText('metadata', 'Operator note')]
 const productFields: readonly AdminControlField[] = [
-  { name: 'merchantId', label: 'Merchant ID', location: 'body', type: 'string', maxLength: 128 },
+  { name: 'merchantId', label: 'Merchant reference', location: 'body', type: 'string', maxLength: 128 },
   { name: 'name', label: 'Product name', location: 'body', type: 'string', required: true, maxLength: 180 },
   { name: 'kind', label: 'Product policy', location: 'body', type: 'enum', options: ['SellerSpecific', 'GenericSealedItem'], defaultValue: 'SellerSpecific' },
   { name: 'status', label: 'Initial state', location: 'body', type: 'enum', options: ['INACTIVE', 'ACTIVE'], defaultValue: 'INACTIVE', description: 'Publication remains subject to the server photo policy.' },
@@ -207,9 +208,9 @@ export const adminControlCatalog: readonly AdminControlDescriptor[] = [
     id: 'notification-inbox', group: 'notifications', label: 'Your operator inbox', supported: true, description: 'Only the signed-in operator’s messages. This does not reveal other users’ inboxes or send broadcasts.',
     read: { path: '/api/notifications/inbox', fields: [pageLimit, { name: 'includeArchived', label: 'Include archived', type: 'boolean', location: 'query', defaultValue: false }], shape: 'list', rowId: 'id', columns: cols('title', 'eventType', 'severity', 'createdAt', 'readAt', 'archivedAt') },
     actions: [
-      { id: 'read', label: 'Mark message read', supported: true, method: 'PATCH', path: '/api/notifications/inbox/{messageId}/read', fields: [idField('messageId', 'Message ID')], confirmation: 'Mark your message as read?', readback: { controlId: 'notification-inbox' } },
-      { id: 'archive', label: 'Archive message', supported: true, method: 'POST', path: '/api/notifications/inbox/{messageId}/archive', fields: [idField('messageId', 'Message ID')], confirmation: 'Archive your message?', readback: { controlId: 'notification-inbox' } },
-      { id: 'unarchive', label: 'Restore archived message', supported: true, method: 'DELETE', path: '/api/notifications/inbox/{messageId}/archive', fields: [idField('messageId', 'Message ID')], confirmation: 'Restore your archived message?', readback: { controlId: 'notification-inbox' } },
+      { id: 'read', label: 'Mark message read', supported: true, method: 'PATCH', path: '/api/notifications/inbox/{messageId}/read', fields: [idField('messageId', 'Selected message')], confirmation: 'Mark your message as read?', readback: { controlId: 'notification-inbox' } },
+      { id: 'archive', label: 'Archive message', supported: true, method: 'POST', path: '/api/notifications/inbox/{messageId}/archive', fields: [idField('messageId', 'Selected message')], confirmation: 'Archive your message?', readback: { controlId: 'notification-inbox' } },
+      { id: 'unarchive', label: 'Restore archived message', supported: true, method: 'DELETE', path: '/api/notifications/inbox/{messageId}/archive', fields: [idField('messageId', 'Selected message')], confirmation: 'Restore your archived message?', readback: { controlId: 'notification-inbox' } },
     ],
   },
   adminRead('notification-outbox', 'notifications', 'Notification processing queue', '/api/admin/web/notification-outbox', cols('eventType', 'aggregateType', 'aggregateId', 'status', 'attemptCount', 'nextAttemptAt', 'updatedAt'), undefined, 'Recorded notification queue processing only. PROCESSED does not prove provider delivery; no resend operation or raw payload is exposed.'),

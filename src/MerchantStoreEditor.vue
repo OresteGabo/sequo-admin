@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { referenceText } from "./adminReferences";
 import { computed, onUnmounted, ref, watch } from 'vue'
 import type { AdminControlRequest } from './adminControls'
 import { prepareMerchantStore, readMerchantStore, restoreMerchantStoreIntent, storeDraft, writeMerchantStore, type MerchantStoreState, type StoreDraft, type StoreIntent } from './merchantStore'
@@ -104,9 +105,9 @@ watch(() => [props.merchantId, props.actorId], () => {
       </fieldset>
       <label>Reason for this change<textarea v-model="draft.reason" :disabled="locked" maxlength="1000" required /></label><button type="submit" :disabled="locked">Review store change</button>
     </form>
-    <section v-if="preview" class="change-preview"><h4>Review new-order policy</h4><p>Merchant {{ preview.merchantId }} · {{ preview.body.open ? 'Manually open' : 'Paused' }} · {{ preview.body.acceptingOrders ? 'Accept orders within hours' : 'Reject new orders' }} · {{ preview.body.timezone }}</p><p>{{ preview.body.openingHours.length ? 'Weekly hours configured' : 'Manual hours' }}; {{ preview.body.temporaryExceptions.length }} dated exceptions; {{ preview.body.temporaryClosure ? 'temporary closure configured' : 'no timed closure' }}.</p><p>Reason: {{ preview.body.reason }}</p><label><input v-model="consent" type="checkbox"> I reviewed these changes and their effect on new orders.</label><button type="button" :disabled="!consent || busy" @click="save">Confirm store change</button><button type="button" :disabled="busy" @click="preview=null">Continue editing</button></section>
+    <section v-if="preview" class="change-preview"><h4>Review new-order policy</h4><p>Merchant {{ referenceText(current, 'merchantId') }} · {{ preview.body.open ? 'Manually open' : 'Paused' }} · {{ preview.body.acceptingOrders ? 'Accept orders within hours' : 'Reject new orders' }} · {{ preview.body.timezone }}</p><p>{{ preview.body.openingHours.length ? 'Weekly hours configured' : 'Manual hours' }}; {{ preview.body.temporaryExceptions.length }} dated exceptions; {{ preview.body.temporaryClosure ? 'temporary closure configured' : 'no timed closure' }}.</p><p>Reason: {{ preview.body.reason }}</p><label><input v-model="consent" type="checkbox"> I reviewed these changes and their effect on new orders.</label><button type="button" :disabled="!consent || busy" @click="save">Confirm store change</button><button type="button" :disabled="busy" @click="preview=null">Continue editing</button></section>
     <section v-if="pending" class="change-preview"><p>A reviewed save is not yet confirmed. Retry preserves the same settings, revision and retry key.</p><button type="button" :disabled="busy" @click="save">Retry reviewed change</button><button type="button" :disabled="busy || !current" @click="discard">Discard retry after refresh</button></section>
-    <section v-if="current?.history.length"><h4>Store change history</h4><ul><li v-for="change in current.history" :key="change.id">{{ change.createdAt }} · {{ change.actorUserId }} · {{ change.reason }}</li></ul></section>
+    <section v-if="current?.history.length"><h4>Store change history</h4><ul><li v-for="change in current.history" :key="change.id">{{ change.createdAt }} · {{ referenceText(change, 'actorUserId') }} · {{ change.reason }}</li></ul></section>
   </section>
 </template>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { referenceText } from "./adminReferences";
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AdminReferenceInput from './AdminReferenceInput.vue'
 import type { AdminControlRequest } from './adminControls'
@@ -54,7 +55,7 @@ async function confirm() {
     const result = await submitEnrollment(props.request, intent)
     if (current !== generation) return
     snapshot.value = result.snapshot; sessionStorage.removeItem(storageKey()); pending.value = null
-    notice.value = `Enrollment confirmed by server history: ${result.operation.entityId}. ${props.kind === 'merchant' ? 'The owner must sign in again for its new scope. Configure the store location and operating hours before taking orders.' : 'The recorded workforce and vehicle are ready for the existing assignment policy; this action records no payment.'}`
+    notice.value = `Enrollment confirmed by server history: ${referenceText(result.operation, "entityId")}. ${props.kind === 'merchant' ? 'The owner must sign in again for its new scope. Configure the store location and operating hours before taking orders.' : 'The recorded workforce and vehicle are ready for the existing assignment policy; this action records no payment.'}`
     emit('changed', result.operation.entityId)
   } catch (failure) { if (current === generation) error.value = message(failure) }
   finally { if (current === generation) busy.value = false }
@@ -65,11 +66,11 @@ async function confirm() {
     <div class="panel-heading"><div><h2>{{ title }}</h2><p>Choose an existing {{ kind === 'merchant' ? 'merchant' : 'rider' }} account to register its {{ kind === 'merchant' ? 'store' : 'delivery profile' }}.</p></div></div>
     <p class="subtle">A super administrator can manage account access and roles in Users.</p>
     <form class="enrollment-lookup" @submit.prevent="load">
-      <label>Existing account<AdminReferenceInput v-if="!pending" v-model="userId" :field="userField" :request="request" /><input v-else :value="userId" disabled /></label>
+      <label>Existing account<AdminReferenceInput v-if="!pending" v-model="userId" :field="userField" :request="request" /><span v-else>{{ referenceText(snapshot?.user) }}</span></label>
       <button class="secondary" type="submit" :disabled="loading || busy || !actorId || !userId.trim()">{{ loading ? 'Loading account…' : 'Refresh account and history' }}</button>
     </form>
     <p v-if="error" class="error-text" role="alert">{{ error }}</p><p v-if="notice" class="status-note" role="status">{{ notice }}</p>
-    <div v-if="snapshot" class="enrollment-account"><strong>{{ snapshot.user.displayName || snapshot.user.email || snapshot.user.id }}</strong><small>{{ snapshot.user.id }} · {{ snapshot.user.status }} · {{ snapshot.user.roles.join(', ') }}</small><p v-if="kind === 'courier' && snapshot.courier">Existing rider: {{ snapshot.courier.id }}. Use the workforce controls to manage it.</p><p v-if="kind === 'merchant' && snapshot.merchants.length">Existing merchants: {{ snapshot.merchants.map(m => `${m.name} (${m.id})`).join(', ') }}</p></div>
+    <div v-if="snapshot" class="enrollment-account"><strong>{{ snapshot.user.displayName || snapshot.user.email || referenceText(snapshot.user) }}</strong><small>{{ referenceText(snapshot.user) }} · {{ snapshot.user.status }} · {{ snapshot.user.roles.join(', ') }}</small><p v-if="kind === 'courier' && snapshot.courier">Existing rider: {{ referenceText(snapshot.courier) }}. Use the workforce controls to manage it.</p><p v-if="kind === 'merchant' && snapshot.merchants.length">Existing merchants: {{ snapshot.merchants.map(m => `${m.name} (${referenceText(m)})`).join(', ') }}</p></div>
     <form v-if="snapshot || pending" @submit.prevent="review">
       <fieldset class="action-field-grid" :disabled="locked">
         <label v-if="kind === 'merchant'">Merchant name<input v-model="name" required maxlength="160" /></label>
@@ -79,8 +80,8 @@ async function confirm() {
       <button v-if="!pending" type="submit" class="secondary" :disabled="locked || !actorId">Review enrollment</button>
     </form>
     <div v-if="pending" class="pending-action-tools"><p>Your reviewed details are saved for retry. Refresh to check whether registration completed.</p><button class="secondary" type="button" :disabled="loading || busy" @click="review">Review exact saved enrollment</button><button v-if="snapshot && !snapshot.history.some(h => h.idempotencyKey === pending?.body.idempotencyKey)" class="secondary" type="button" :disabled="loading || busy" @click="discardSaved">Discard saved intent after checking history</button></div>
-    <details v-if="snapshot?.history.length"><summary>Enrollment actor history</summary><ul><li v-for="entry in snapshot.history" :key="entry.id">{{ entry.kind }} · {{ entry.entityId }} · {{ entry.actorUserId }} · {{ entry.createdAt }}<p>{{ entry.reason }}</p></li></ul></details>
-    <div v-if="preview" class="enrollment-review" role="region" aria-label="Review enrollment"><h3>Confirm {{ kind === 'merchant' ? 'merchant' : 'rider' }} enrollment</h3><dl><dt>Existing account</dt><dd>{{ preview.userId }}</dd><dt v-if="kind === 'merchant'">Merchant name</dt><dd v-if="kind === 'merchant'">{{ preview.body.name }}</dd><template v-else><dt>Workforce and vehicle</dt><dd>{{ preview.body.workforceType }} · {{ preview.body.vehicleType }}</dd></template><dt>Reason</dt><dd>{{ preview.body.reason }}</dd></dl><p>Confirm the selected account and these details before saving.</p><button type="button" class="secondary" :disabled="busy" @click="preview = null">Cancel</button><button type="button" class="secondary" :disabled="busy" @click="confirm">Confirm enrollment</button></div>
+    <details v-if="snapshot?.history.length"><summary>Enrollment actor history</summary><ul><li v-for="entry in snapshot.history" :key="entry.id">{{ entry.kind }} · {{ referenceText(entry, 'entityId') }} · {{ referenceText(entry, 'actorUserId') }} · {{ entry.createdAt }}<p>{{ entry.reason }}</p></li></ul></details>
+    <div v-if="preview" class="enrollment-review" role="region" aria-label="Review enrollment"><h3>Confirm {{ kind === 'merchant' ? 'merchant' : 'rider' }} enrollment</h3><dl><dt>Existing account</dt><dd>{{ referenceText(snapshot?.user) }}</dd><dt v-if="kind === 'merchant'">Merchant name</dt><dd v-if="kind === 'merchant'">{{ preview.body.name }}</dd><template v-else><dt>Workforce and vehicle</dt><dd>{{ preview.body.workforceType }} · {{ preview.body.vehicleType }}</dd></template><dt>Reason</dt><dd>{{ preview.body.reason }}</dd></dl><p>Confirm the selected account and these details before saving.</p><button type="button" class="secondary" :disabled="busy" @click="preview = null">Cancel</button><button type="button" class="secondary" :disabled="busy" @click="confirm">Confirm enrollment</button></div>
   </section>
 </template>
 <style scoped>

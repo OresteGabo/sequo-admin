@@ -1,3 +1,4 @@
+import { referenceText } from "./adminReferences.ts"
 import { reconciliationLabel } from './paymentInvestigationReads.ts'
 export type AdminReadSection = 'deliveries' | 'payments' | 'commissions' | 'returns' | 'relay' | 'settings'
 
@@ -82,8 +83,8 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
         rows: data.missions.map((mission) => ({
           id: mission.id,
           cells: [
-            `${mission.deliveryCode} · Order ${mission.orderId}`,
-            [label(mission.deliveryOption?.id ?? mission.deliveryMode), label(mission.destinationType), mission.courierId ?? 'Unassigned',
+            `${referenceText(mission)} · Order ${referenceText(mission, "orderId")}`,
+            [label(mission.deliveryOption?.id ?? mission.deliveryMode), label(mission.destinationType), mission.courierId ? referenceText(mission, 'courierId') : 'Unassigned',
               mission.assignmentWorkforceType ? label(mission.assignmentWorkforceType) : '',
               mission.subscriberPriority ? 'Subscriber priority' : '',
               mission.deliveryOption ? `${mission.deliveryOption.etaMinMinutes}–${mission.deliveryOption.etaMaxMinutes} min · ${money(mission.deliveryOption.deliveryFeeCfa)} · ${mission.deliveryOption.zoneId}` : 'ETA unavailable',
@@ -96,7 +97,7 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
         summary: 'Mission amounts are stored estimates/records. Read the mission ledger in Payments for posted courier payables and SEQUO shortfall; no provider transfer is inferred.',
         columns: ['Mission / order', 'Recorded customer / courier amount', 'Recorded shortfall / workforce'],
         rows: data.missions.map(mission => ({ id: mission.id, cells: [
-          `${mission.id} · Order ${mission.orderId} · ${mission.courierId ?? 'Unassigned'}`,
+          `${referenceText(mission)} · Order ${referenceText(mission, "orderId")} · ${mission.courierId ? referenceText(mission, 'courierId') : 'Unassigned'}`,
           `Customer ${optionalMoney(mission.customerDeliveryFeeCfa)} · Courier estimate ${optionalMoney(mission.courierFeeCfa)}`,
           `${optionalMoney(mission.shortfallCfa)} · ${mission.assignmentWorkforceType ? label(mission.assignmentWorkforceType) : 'Workforce snapshot unavailable'}`,
         ] })),
@@ -114,7 +115,7 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
         rows: data.merchantPayouts.map((payout) => ({
           id: payout.id,
           cells: [
-            `${payout.merchantId} · Order ${payout.orderId} · Source ${payout.sourceOrderItemId ?? 'Unavailable'}`,
+            `${referenceText(payout, "merchantId")} · Order ${referenceText(payout, "orderId")} · Source ${referenceText(payout, "sourceOrderItemId")}`,
             `Net ${money(payout.merchantNetCfa)} · Commission ${optionalMoney(payout.commissionCfa)} · Margin ${optionalMoney(payout.platformMarginCfa)}`,
 
             [label(payout.status), payout.activeReturnHold ? 'Return hold' : '', payout.activeDisputeHold ? 'Dispute hold' : '',
@@ -128,7 +129,7 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
           id: event.id,
           cells: [
             `${label(event.provider)} · ${event.eventId}`,
-            `${event.checkoutId} · ${money(event.amountCfa)}`,
+            `${referenceText(event, "checkoutId")} · ${money(event.amountCfa)}`,
             `${label(event.status)} · ${reconciliationLabel(event.reconciliationStatus)} · ${timestamp(event.receivedAt)}`,
           ],
         })),
@@ -140,7 +141,7 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
         title: 'Merchant commission overrides', summary: `Current default commission ${rate(data.defaultRateBps)}. Read a frozen sub-order snapshot in Finance source records to verify an existing order.`,
         columns: ['Merchant', 'Current commission', 'Reason / recorded operator'],
         rows: data.overrides.map((item) => ({
-          id: item.merchantId, cells: [item.merchantId, rate(item.commissionRateBps), [item.reason ?? '—', item.updatedByUserId ?? 'Recorded operator unavailable', item.updatedAt ? timestamp(item.updatedAt) : ''].filter(Boolean).join(' · ')],
+          id: item.merchantId, cells: [referenceText(item, "merchantId"), rate(item.commissionRateBps), [item.reason ?? '—', referenceText(item, 'updatedByUserId'), item.updatedAt ? timestamp(item.updatedAt) : ''].filter(Boolean).join(' · ')],
         })),
       }]
     }
@@ -151,9 +152,9 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
         rows: data.map((item) => ({
           id: item.id,
           cells: [
-            `${item.id} · Order ${item.orderId}`,
+            `${referenceText(item)} · Order ${referenceText(item, "orderId")}`,
             `${label(item.status)} · ${timestamp(item.updatedAt)}`,
-            `${money(item.requestedRefundCfa)} · ${item.relayPointId ?? '—'}`,
+            `${money(item.requestedRefundCfa)} · ${referenceText(item, 'relayPointId')}`,
           ],
         })),
       }]
@@ -166,8 +167,8 @@ export async function readAdminSection(section: AdminReadSection, request: Admin
         rows: data.parcels.map((parcel) => ({
           id: parcel.id,
           cells: [
-            [parcel.id, parcel.orderId && `Order ${parcel.orderId}`, parcel.returnId && `Return ${parcel.returnId}`].filter(Boolean).join(' · '),
-            `${parcel.relayPointId} · ${parcel.lockerId ?? '—'}`,
+            [referenceText(parcel), parcel.orderId && `Order ${referenceText(parcel, "orderId")}`, parcel.returnId && `Return ${referenceText(parcel, "returnId")}`].filter(Boolean).join(' · '),
+            `${referenceText(parcel, 'relayPointId')} · ${referenceText(parcel, 'lockerId')}`,
             `${label(parcel.status)} · ${timestamp(parcel.depositedAt)}`,
           ],
         })),

@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { referenceText, referenceField } from "./adminReferences";
+import AdminReferenceInput from './AdminReferenceInput.vue'
 import { onUnmounted, ref } from 'vue'
 import { readFinanceSource, type FinanceRequest, type FinanceSourceRead, type FinanceSourceType } from './financeReads'
-const props = defineProps<{ request: FinanceRequest }>()
+const props = defineProps<{ request: import('./adminControls').AdminControlRequest }>()
 const sourceType = ref<FinanceSourceType>('DeliveryMission')
 const sourceId = ref('')
 const result = ref<FinanceSourceRead | null>(null)
@@ -29,20 +31,20 @@ async function refresh() {
 <template>
   <section class="finance-ledger" aria-label="Finance source records">
     <h3>Finance source records</h3>
-    <p>Use a persisted mission ID or merchant sub-order ID from the lists. Posted ledger entries record accruals and expenses; they do not confirm a provider transfer.</p>
+    <p>Use a mission reference or merchant order reference from the lists. Posted ledger entries record accruals and expenses; they do not confirm a provider transfer.</p>
     <form class="filter-row" @submit.prevent="refresh">
-      <label>Finance source<select v-model="sourceType" :disabled="busy"><option value="DeliveryMission">Delivery mission ledger</option><option value="OrderItem">Merchant sub-order snapshot and ledger</option></select></label>
-      <label>Persisted source ID<input v-model="sourceId" maxlength="128" required autocomplete="off" :disabled="busy" /></label>
+      <label>Finance source<select v-model="sourceType" :disabled="busy" @change="sourceId=''; result=null"><option value="DeliveryMission">Delivery mission ledger</option><option value="OrderItem">Merchant sub-order snapshot and ledger</option></select></label>
+      <label>Source reference<AdminReferenceInput :key="sourceType" v-model="sourceId" :field="referenceField(sourceType === 'DeliveryMission' ? 'missionId' : 'subOrderId', 'Source reference')" :request="request" :disabled="busy" /></label>
       <button type="submit" :disabled="busy || !sourceId.trim()">{{ busy ? 'Reading finance records…' : 'Read finance records' }}</button>
     </form>
     <p v-if="error" class="error-text" role="alert">{{ error }}</p>
     <p v-if="!result && !busy && !error">No source selected.</p>
     <article v-if="result" class="finance-card">
-      <h4>{{ label(result.sourceType) }} · {{ result.sourceId }}</h4>
+      <h4>{{ label(result.sourceType) }} · {{ referenceText(result.snapshot ?? result.ledger?.[0], result.snapshot ? 'id' : 'sourceId') }}</h4>
       <p v-for="message in result.errors" :key="message" class="error-text" role="alert">{{ message }}</p>
       <template v-if="result.snapshot">
         <h4>Frozen merchant commission snapshot</h4>
-        <p>Order {{ result.snapshot.orderId }} · Merchant {{ result.snapshot.merchantId }} · {{ label(result.snapshot.status) }} · {{ timestamp(result.snapshot.updatedAt) }}</p>
+        <p>Order {{ referenceText(result.snapshot, 'orderId') }} · Merchant {{ referenceText(result.snapshot, 'merchantId') }} · {{ label(result.snapshot.status) }} · {{ timestamp(result.snapshot.updatedAt) }}</p>
         <dl><dt>Item subtotal</dt><dd>{{ money(result.snapshot.itemSubtotalCfa) }}</dd><dt>Commission rate</dt><dd>{{ rate(result.snapshot.commissionRateBps) }}</dd><dt>Commission amount</dt><dd>{{ money(result.snapshot.commissionCfa) }}</dd><dt>Merchant net</dt><dd>{{ money(result.snapshot.merchantNetCfa) }}</dd></dl>
         <p>These amounts were stored with the sub-order. A later commission override does not rewrite the snapshot.</p>
       </template>
@@ -51,9 +53,9 @@ async function refresh() {
       <p v-else-if="!result.ledger.length">No ledger entries recorded for this source.</p>
       <ul v-else><li v-for="entry in result.ledger" :key="entry.id">
         <strong>{{ label(entry.account) }} · {{ label(entry.direction) }} · {{ money(entry.amountCfa) }}</strong>
-        <p>{{ entry.id }} · {{ timestamp(entry.createdAt) }}</p>
+        <p>{{ referenceText(entry) }} · {{ timestamp(entry.createdAt) }}</p>
         <p>{{ entry.description }}</p>
-        <p v-if="entry.merchantId">Merchant {{ entry.merchantId }}</p><p v-if="entry.courierId">Courier {{ entry.courierId }} · {{ entry.workforceType ? label(entry.workforceType) : 'Workforce snapshot unavailable' }}</p><p v-if="entry.relayPointId">Relay {{ entry.relayPointId }}</p>
+        <p v-if="entry.merchantId">Merchant {{ referenceText(entry, 'merchantId') }}</p><p v-if="entry.courierId">Courier {{ referenceText(entry, 'courierId') }} · {{ entry.workforceType ? label(entry.workforceType) : 'Workforce snapshot unavailable' }}</p><p v-if="entry.relayPointId">Relay {{ referenceText(entry, 'relayPointId') }}</p>
       </li></ul>
     </article>
   </section>

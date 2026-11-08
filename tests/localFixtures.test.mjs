@@ -53,3 +53,16 @@ test('failed authenticated reads stay unavailable and never fall back to mock sc
   }
   await assert.rejects(readLocalFixtures(async () => ({})), /could not be verified/)
 })
+
+test('additive server references are retained while resource IDs and proof credentials keep their separate semantics', () => {
+  const input = manifest()
+  input.accounts[0].publicReference = 'A12-345-6BJ'
+  input.scenarios[0].resourceReferences = { parcelId: 'P00-11Z-Z7J' }
+  const parsed = validateLocalFixtureManifest(input)
+  assert.equal(parsed.accounts[0].publicReference, 'A12-345-6BJ')
+  assert.deepEqual(parsed.scenarios[0].resourceReferences, { parcelId: 'P00-11Z-Z7J' })
+  assert.deepEqual(parsed.scenarios[0].resourceIds, manifest().scenarios[0].resourceIds)
+  assert.deepEqual(parsed.scenarios[0].credentials, manifest().scenarios[0].credentials)
+  input.scenarios[0].resourceReferences.parcelId = 'P00-11Z-Z7K'
+  assert.throws(() => validateLocalFixtureManifest(input), /could not be verified/)
+})

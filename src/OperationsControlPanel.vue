@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import AdminIcon from "./AdminIcon.vue";
 import AdminReferenceInput from "./AdminReferenceInput.vue";
-import { hasAdminReference } from "./adminReferences";
+import { hasAdminReference, referenceText, referenceDisplayValue, referenceDisplayTree, referenceForId, referenceSearchQuery } from "./adminReferences";
 import CatalogOptionsEditor from "./CatalogOptionsEditor.vue";
 import MerchantStoreEditor from "./MerchantStoreEditor.vue";
 import {
@@ -132,7 +132,7 @@ const relatedControls = computed(() => {
     }));
 });
 const visibleRecords = computed(() => {
-  const query = search.value.trim().toLowerCase();
+  const query = referenceSearchQuery(search.value);
   return query
     ? records.value.filter((row) =>
         JSON.stringify(row).toLowerCase().includes(query),
@@ -158,7 +158,7 @@ function text(value: unknown): string {
   if (Array.isArray(value)) return value.map(text).join(", ");
   if (typeof value === "object")
     return Object.entries(value as Record<string, unknown>)
-      .map(([key, item]) => `${human(key)}: ${text(item)}`)
+      .map(([key, item]) => `${human(key)}: ${text(referenceDisplayValue(value as Record<string, unknown>, key))}`)
       .join(" · ");
   return String(value);
 }
@@ -203,7 +203,7 @@ function reset(
       values[field.name] = existing;
     else if (field.defaultValue !== undefined)
       values[field.name] = field.defaultValue;
-    else if (field.name === "idempotencyKey")
+    else if (["idempotencyKey", "eventId"].includes(field.name))
       values[field.name] = crypto.randomUUID();
   });
 }
@@ -345,7 +345,7 @@ function resolveAfterReview() {
 function reviewRetry() {
   if (
     !pending.value ||
-    !action.value?.fields.some((field) => field.name === "idempotencyKey") ||
+    !action.value?.fields.some((field) => ["idempotencyKey", "eventId"].includes(field.name)) ||
     busy.value
   )
     return;
@@ -732,7 +732,7 @@ defineExpose({ refresh, openControl, openAction });
                 :class="{ 'row-selected': selectedRecord === row }"
               >
                 <td v-for="column in selected.read.columns" :key="column.key">
-                  {{ format(readAt(row, column.key), column.format) }}
+                  {{ format(referenceDisplayValue(row, column.key), column.format) }}
                 </td>
                 <td>
                   <button
@@ -848,7 +848,7 @@ defineExpose({ refresh, openControl, openAction });
                 <label
                   v-for="field in action.fields.filter(
                     (field) =>
-                      !['idempotencyKey', 'expectedUpdatedAt', 'expectedRevision'].includes(
+                      !['idempotencyKey', 'eventId', 'expectedUpdatedAt', 'expectedRevision'].includes(
                         field.name,
                       ),
                   )"
@@ -893,6 +893,10 @@ defineExpose({ refresh, openControl, openAction });
                     :maxlength="field.maxLength"
                     :placeholder="field.placeholder"
                     rows="3"
+                  /><input
+                    v-else-if="field.name === 'messageId'"
+                    :value="actionValues.messageId ? selectedRecord?.title ?? 'Selected message' : ''"
+                    readonly required placeholder="Select a message above"
                   /><AdminReferenceInput
                     v-else-if="hasAdminReference(field.name)"
                     v-model="actionValues[field.name]"
@@ -979,13 +983,13 @@ defineExpose({ refresh, openControl, openAction });
           <dl>
             <div v-for="(value, key) in selectedRecord" :key="key">
               <dt>{{ human(String(key)) }}</dt>
-              <dd>{{ text(value) }}</dd>
+              <dd>{{ text(referenceDisplayValue(selectedRecord!, String(key))) }}</dd>
             </div>
           </dl>
         </details>
         <details v-if="result !== null" class="record-details">
           <summary>Recorded server result</summary>
-          <pre>{{ JSON.stringify(result, null, 2) }}</pre>
+          <pre>{{ JSON.stringify(referenceDisplayTree(result), null, 2) }}</pre>
         </details>
       </template>
     </article>
@@ -1011,14 +1015,14 @@ defineExpose({ refresh, openControl, openAction });
           <div
             v-for="field in action.fields.filter(
               (field) =>
-                !['idempotencyKey', 'expectedUpdatedAt', 'expectedRevision'].includes(field.name) &&
+                !['idempotencyKey', 'eventId', 'expectedUpdatedAt', 'expectedRevision'].includes(field.name) &&
                 reviewedValues?.[field.name] !== undefined &&
                 reviewedValues?.[field.name] !== '',
             )"
             :key="field.name"
           >
             <dt>{{ field.label }}</dt>
-            <dd>{{ text(reviewedValues?.[field.name]) }}</dd>
+            <dd>{{ field.name === 'messageId' ? selectedRecord?.title ?? 'Selected message' : hasAdminReference(field.name) ? referenceForId(field.name, reviewedValues?.[field.name]) : text(reviewedValues?.[field.name]) }}</dd>
           </div>
         </dl>
         <div class="dialog-actions">

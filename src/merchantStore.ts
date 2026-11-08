@@ -29,7 +29,7 @@ export const merchantStoreControl: AdminControlDescriptor = {
   id: 'merchant-store-settings', group: 'merchants', label: 'Store availability and hours', supported: true,
   description: 'Persisted manual availability, weekly hours and dated closures. New quotes and checkout follow the same server policy; existing orders stay unchanged.',
   read: { path: '/api/admin/web/merchants/{merchantId}/store', shape: 'record', rowId: 'merchantId',
-    fields: [{ name: 'merchantId', label: 'Merchant ID', location: 'path', type: 'string', required: true, valueFrom: 'id', maxLength: 128 }],
+    fields: [{ name: 'merchantId', label: 'Merchant reference', location: 'path', type: 'string', required: true, valueFrom: 'id', maxLength: 128 }],
     columns: [{ key: 'openStatus', label: 'Current state' }, { key: 'configured', label: 'Configured', format: 'boolean' }, { key: 'canAcceptOrders', label: 'Accepts orders now', format: 'boolean' }, { key: 'timezone', label: 'Timezone' }, { key: 'updatedAt', label: 'Updated', format: 'date' }] },
   actions: [],
 }

@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { referenceText, referenceField } from "./adminReferences";
+import AdminReferenceInput from './AdminReferenceInput.vue'
 import { onMounted, onUnmounted, ref } from 'vue'
 
-type Request = <T>(path: string, retryAfterRefresh?: boolean, method?: 'GET' | 'POST', body?: unknown) => Promise<T>
+type Request = import('./adminControls').AdminControlRequest
 type HistoryEntry = { action: string; actorUserId: string | null; metadata: string; createdAt: string }
 type Cooperative = {
   id: string; code: string; name: string; city: string; status: string
@@ -91,7 +93,7 @@ async function review(cooperative: Cooperative, status: 'APPROVED' | 'REJECTED')
   if (!reason) { error.value = 'Enter a reason for the cooperative decision.'; return }
   const id = cooperative.id
   const body = Object.freeze({ status, reason })
-  await start(`${status === 'APPROVED' ? 'Approve' : 'Reject'} cooperative ${cooperative.name} (${id})?\nReason: ${reason}`, async () => {
+  await start(`${status === 'APPROVED' ? 'Approve' : 'Reject'} cooperative ${cooperative.name} (${referenceText(cooperative)})?\nReason: ${reason}`, async () => {
     await post(`/api/admin/cooperatives/${encoded(id)}/review`, body)
   }, () => cooperatives.value.some(item => item.id === id && item.status === status && item.reviewReason === reason))
 }
@@ -109,7 +111,7 @@ async function createGrouping() {
   const cooperative = cooperativeId.value
   if (!order) return
   const body = Object.freeze({ manifestId: crypto.randomUUID(), orderId: order, ...(cooperative ? { cooperativeId: cooperative } : {}) })
-  await start(`Validate grouping for order ${order}?\nCooperative: ${cooperative || 'Operator-approved grouping without cooperative'}.\nThe server derives the actual merchant packages.`, async () => {
+  await start(`Validate grouping for the verified order?\nCooperative: ${cooperatives.value.find(item => item.id === cooperative)?.name || 'Operator-approved grouping without cooperative'}.\nThe server derives the actual merchant packages.`, async () => {
     const accepted = await props.request<Manifest>('/api/consolidations', true, 'POST', body)
     const saved = await props.request<Manifest>(`/api/consolidations/${encoded(accepted.manifestId)}`)
     if (!disposed) selectManifest(saved)
@@ -125,7 +127,7 @@ async function receive(subOrderId: string) {
   if (!manifest || !metadata) { error.value = 'Enter the physical receipt reference before confirming custody.'; return }
   const id = manifest.manifestId
   const body = Object.freeze({ metadata })
-  await start(`Confirm actual SEQUO receipt of ${subOrderId} for order ${manifest.orderId}?\nReceipt reference: ${metadata}`, async () => {
+  await start(`Confirm actual SEQUO receipt of ${referenceText(manifest.sellerPackages.find(part => part.subOrderId === subOrderId), "subOrderId")} for order ${referenceText(manifest, "orderId")}?\nReceipt reference: ${metadata}`, async () => {
     await post(`/api/consolidations/${encoded(id)}/seller-packages/${encoded(subOrderId)}/collected`, body)
   }, () => group(id)?.sellerPackages.some(item => item.subOrderId === subOrderId && item.collected) === true)
 }
@@ -135,7 +137,7 @@ async function seal() {
   if (!manifest || !packageId) return
   const id = manifest.manifestId
   const body = Object.freeze({ event: 'SequoCreatesFinalPackage', finalPackageId: packageId })
-  await start(`Seal final package ${packageId} for order ${manifest.orderId}?\nVerify all merchant packages are physically in SEQUO custody.`, async () => {
+  await start(`Seal the final package for order ${referenceText(manifest, "orderId")}?\nVerify all merchant packages are physically in SEQUO custody.`, async () => {
     const result = await props.request<{ accepted: boolean; reason: string }>(`/api/consolidations/${encoded(id)}/transitions`, true, 'POST', body)
     if (!result.accepted) throw new Error(result.reason)
   }, () => group(id)?.finalPackageId === packageId && ['Consolidated', 'Dispatched'].includes(group(id)?.status ?? ''))
@@ -145,7 +147,7 @@ async function dispatch() {
   if (!manifest) return
   const id = manifest.manifestId
   const body = Object.freeze({})
-  await start(`${manifest.status === 'Dispatched' ? 'Verify recorded' : 'Dispatch'} final package ${manifest.finalPackageId ?? id} for order ${manifest.orderId}?\nThe server enforces one final dispatch.`, async () => {
+  await start(`${manifest.status === 'Dispatched' ? 'Verify recorded' : 'Dispatch'} final package ${referenceText(manifest, 'finalPackageId')} for order ${referenceText(manifest, 'orderId')}?\nThe server enforces one final dispatch.`, async () => {
     await post(`/api/consolidations/${encoded(id)}/dispatch-final-package`, body)
   }, () => group(id)?.status === 'Dispatched')
 }
@@ -171,33 +173,33 @@ onMounted(() => { void run(async () => { await refresh(); if (props.initialManif
     <label>Decision reason<input v-model="reviewReason" :disabled="busy || Boolean(pending)" maxlength="2000" autocomplete="off" /></label>
     <article v-for="cooperative in cooperatives" :key="cooperative.id" class="consolidation-card">
       <strong>{{ cooperative.name }} · {{ cooperative.status }}</strong>
-      <p>{{ cooperative.city }} · {{ cooperative.members.map(member => member.merchantId).join(', ') }}</p>
-      <p>Reviewed by {{ cooperative.reviewedByUserId ?? 'Not reviewed' }} · {{ timestamp(cooperative.reviewedAt) }}<span v-if="cooperative.reviewReason"> · {{ cooperative.reviewReason }}</span></p>
+      <p>{{ cooperative.city }} · {{ cooperative.members.map(member => referenceText(member, 'merchantId')).join(', ') }}</p>
+      <p>Reviewed by {{ referenceText(cooperative, 'reviewedByUserId') }} · {{ timestamp(cooperative.reviewedAt) }}<span v-if="cooperative.reviewReason"> · {{ cooperative.reviewReason }}</span></p>
       <button type="button" :disabled="busy || stale || Boolean(pending) || !reviewReason.trim() || cooperative.status === 'APPROVED'" @click="review(cooperative, 'APPROVED')">Approve cooperative</button>
       <button class="secondary" type="button" :disabled="busy || stale || Boolean(pending) || !reviewReason.trim() || cooperative.status === 'REJECTED'" @click="review(cooperative, 'REJECTED')">Reject cooperative</button>
-      <ul><li v-for="(entry, index) in cooperative.history ?? []" :key="index">{{ entry.action }} · {{ entry.actorUserId ?? 'System' }} · {{ timestamp(entry.createdAt) }} · {{ entry.metadata }}</li></ul>
+      <ul><li v-for="(entry, index) in cooperative.history ?? []" :key="index">{{ entry.action }} · {{ referenceText(entry, 'actorUserId') }} · {{ timestamp(entry.createdAt) }} · {{ entry.metadata }}</li></ul>
     </article>
     <h4>Order grouping</h4>
     <form class="filter-row" @submit.prevent="createGrouping">
-      <label>Paid order ID<input v-model="orderId" :disabled="busy || Boolean(pending)" required maxlength="128" autocomplete="off" /></label>
+      <label>Paid order reference<AdminReferenceInput v-model="orderId" :field="referenceField('orderId', 'Paid order reference')" :request="request" :disabled="busy || Boolean(pending)" /></label>
       <label>Approved cooperative (optional)<select v-model="cooperativeId" :disabled="busy || Boolean(pending)"><option value="">Operator-approved grouping without cooperative</option><option v-for="cooperative in cooperatives.filter(item => item.status === 'APPROVED')" :key="cooperative.id" :value="cooperative.id">{{ cooperative.name }}</option></select></label>
       <button type="submit" :disabled="busy || stale || Boolean(pending) || !orderId.trim()">Validate grouping</button>
       <button class="secondary" type="button" :disabled="busy || Boolean(pending) || !orderId.trim()" @click="loadOrder">Load order manifest</button>
     </form>
     <p v-if="!busy && !manifests.length">No manifests recorded.</p>
-    <ul><li v-for="manifest in manifests" :key="manifest.manifestId"><button class="secondary" type="button" :disabled="busy || stale || Boolean(pending)" @click="selectManifest(manifest)">{{ manifest.orderId }} · {{ manifest.status }}</button></li></ul>
+    <ul><li v-for="manifest in manifests" :key="manifest.manifestId"><button class="secondary" type="button" :disabled="busy || stale || Boolean(pending)" @click="selectManifest(manifest)">{{ referenceText(manifest, 'orderId') }} · {{ manifest.status }}</button></li></ul>
     <article v-if="selected" class="consolidation-card">
-      <h4>{{ selected.manifestId }} · {{ selected.status }}</h4>
-      <p>Order {{ selected.orderId }} · Grouping approved by {{ selected.approvedByUserId ?? 'Legacy approval unavailable' }}<span v-if="selected.cooperativeId"> · {{ selected.cooperativeId }}</span></p>
+      <h4>{{ referenceText(selected, 'manifestId') }} · {{ selected.status }}</h4>
+      <p>Order {{ referenceText(selected, 'orderId') }} · Grouping approved by {{ referenceText(selected, 'approvedByUserId') }}<span v-if="selected.cooperativeId"> · {{ referenceText(selected, 'cooperativeId') }}</span></p>
       <label>Physical receipt reference<input v-model="receiptNote" :disabled="busy || Boolean(pending)" maxlength="2000" autocomplete="off" /></label>
       <ul><li v-for="part in selected.sellerPackages" :key="part.subOrderId">
-        {{ part.merchantId }} · {{ part.subOrderId }} · {{ part.packageCount }} package(s) · {{ part.ready ? 'Prepared' : 'Awaiting preparation' }} · {{ part.collected ? 'Received by SEQUO' : 'Awaiting SEQUO receipt' }}
+        {{ referenceText(part, 'merchantId') }} · {{ referenceText(part, 'subOrderId') }} · {{ part.packageCount }} package(s) · {{ part.ready ? 'Prepared' : 'Awaiting preparation' }} · {{ part.collected ? 'Received by SEQUO' : 'Awaiting SEQUO receipt' }}
         <button class="secondary" type="button" :disabled="busy || stale || Boolean(pending) || part.collected || !part.ready || !receiptNote.trim() || selected.status !== 'ReadyForSequoPickup'" @click="receive(part.subOrderId)">Confirm SEQUO receipt</button>
       </li></ul>
-      <form class="filter-row" @submit.prevent="seal"><label>Final package ID<input v-model="finalPackageId" :disabled="busy || Boolean(pending)" required maxlength="128" autocomplete="off" /></label><button type="submit" :disabled="busy || stale || Boolean(pending) || selected.status !== 'InSequoCustody' || !finalPackageId.trim()">Seal final package</button></form>
+      <form class="filter-row" @submit.prevent="seal"><label>Final package label<input v-model="finalPackageId" :disabled="busy || Boolean(pending)" required maxlength="128" autocomplete="off" /></label><button type="submit" :disabled="busy || stale || Boolean(pending) || selected.status !== 'InSequoCustody' || !finalPackageId.trim() ">Seal final package</button></form>
       <button type="button" :disabled="busy || stale || Boolean(pending) || !['Consolidated', 'Dispatched'].includes(selected.status)" @click="dispatch">{{ selected.status === 'Dispatched' ? 'Verify final dispatch' : 'Dispatch final package' }}</button>
       <h4>Operator history</h4>
-      <ul><li v-for="(entry, index) in selected.history ?? []" :key="index">{{ entry.action }} · {{ entry.actorUserId ?? 'System' }} · {{ timestamp(entry.createdAt) }} · {{ entry.metadata }}</li></ul>
+      <ul><li v-for="(entry, index) in selected.history ?? []" :key="index">{{ entry.action }} · {{ referenceText(entry, 'actorUserId') }} · {{ timestamp(entry.createdAt) }} · {{ entry.metadata }}</li></ul>
     </article>
   </section>
 </template>

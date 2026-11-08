@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import AdminReferenceInput from './AdminReferenceInput.vue'
+import { referenceText, referenceField } from "./adminReferences";
 import { onMounted, onUnmounted, ref } from 'vue'
 import { readPaymentCheckout, readPaymentCheckoutQueue, reconciliationLabel, type PaymentCheckout, type PaymentInvestigation, type PaymentReadRequest } from './paymentInvestigationReads'
-const props = defineProps<{ request: PaymentReadRequest; initialCheckoutId?: string }>()
+const props = defineProps<{ request: import('./adminControls').AdminControlRequest; initialCheckoutId?: string }>()
 const rows = ref<PaymentCheckout[]>([])
 const queueBusy = ref(false)
 const queueError = ref('')
@@ -46,21 +48,21 @@ onMounted(async () => { await refreshQueue(); if (props.initialCheckoutId) await
     <p v-else-if="queueBusy" role="status">Loading checkouts…</p>
     <p v-else-if="!rows.length">No checkouts recorded.</p>
     <ul v-else class="checkout-queue"><li v-for="row in rows" :key="row.checkoutId">
-      <button class="secondary" type="button" :disabled="detailBusy" @click="lookup(row.checkoutId)">{{ row.checkoutId }}</button>
+      <button class="secondary" type="button" :disabled="detailBusy" @click="lookup(row.checkoutId)">{{ referenceText(row, 'checkoutId') }}</button>
       <p>{{ label(row.paymentProvider) }} · {{ money(row) }} · {{ label(row.status) }} · Updated {{ timestamp(row.updatedAt) }}</p>
     </li></ul>
     <form class="filter-row" @submit.prevent="lookup()">
-      <label>Exact checkout ID<input v-model="lookupId" required maxlength="128" autocomplete="off" :disabled="detailBusy || queueBusy" /></label>
+      <label>Checkout reference<AdminReferenceInput v-model="lookupId" :field="referenceField('checkoutId', 'Checkout reference')" :request="request" :disabled="detailBusy || queueBusy" /></label>
       <button type="submit" :disabled="detailBusy || queueBusy || !lookupId.trim()">{{ detailBusy ? 'Reading checkout…' : 'Read checkout' }}</button>
     </form>
     <p v-if="detailError" class="error-text" role="alert">{{ detailError }}</p>
     <article v-if="detail" class="checkout-detail">
-      <h4>{{ detail.checkout.checkoutId }} · {{ label(detail.checkout.status) }}</h4>
+      <h4>{{ referenceText(detail.checkout, 'checkoutId') }} · {{ label(detail.checkout.status) }}</h4>
       <dl><dt>Provider / amount</dt><dd>{{ label(detail.checkout.paymentProvider) }} · {{ money(detail.checkout) }}</dd>
         <dt>Payment reference</dt><dd>{{ detail.checkout.paymentReference }}</dd><dt>Provider reference</dt><dd>{{ detail.checkout.providerReference ?? 'Not recorded' }}</dd>
         <dt>Created</dt><dd>{{ timestamp(detail.checkout.createdAt) }}</dd><dt>Updated</dt><dd>{{ timestamp(detail.checkout.updatedAt) }}</dd>
         <dt>Checkout terminal time</dt><dd>{{ timestamp(detail.checkout.completedAt) }}</dd>
-        <dt>Persisted order</dt><dd>{{ detail.checkout.orderId ?? 'No order linked' }}<template v-if="detail.checkout.orderId"> · {{ label(detail.checkout.orderStatus) }}</template></dd></dl>
+        <dt>Persisted order</dt><dd>{{ detail.checkout.orderId ? referenceText(detail.checkout, 'orderId') : 'No order linked' }}<template v-if="detail.checkout.orderId"> · {{ label(detail.checkout.orderStatus) }}</template></dd></dl>
       <h4>Received events and reconciliation outcomes</h4>
       <p>Latest 100 stored events for this checkout. Missing historical outcomes require review; no replay is performed here.</p>
       <p v-if="!detail.events.length">No callback events recorded for this checkout.</p>

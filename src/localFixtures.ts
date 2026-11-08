@@ -1,6 +1,7 @@
+import { isValidReference } from "./humanReference.ts"
 import type { AdminControlRequest, AdminControlGroup } from './adminControls'
-export type FixtureAccount = { id: string; name: string; email: string; roles: string[]; purpose: string }
-export type FixtureScenario = { id: string; title: string; summary: string; category: AdminControlGroup | 'dashboard'; resourceIds: Record<string, string>; nextActions: string[]; credentials: Record<string, string> }
+export type FixtureAccount = { publicReference?: string; id: string; name: string; email: string; roles: string[]; purpose: string }
+export type FixtureScenario = { id: string; title: string; summary: string; category: AdminControlGroup | 'dashboard'; resourceIds: Record<string, string>; resourceReferences?: Record<string, string>; nextActions: string[]; credentials: Record<string, string> }
 export type LocalFixtureManifest = { environment: 'LOCAL_FIXTURE'; namespace: 'local-ops-v1'; version: 1; seededAt: string | null; accounts: FixtureAccount[]; scenarios: FixtureScenario[]; note: string }
 const categories = new Set(['dashboard', 'users', 'merchants', 'catalog', 'riders', 'orders', 'deliveries', 'relay', 'returns', 'payments', 'commissions', 'negotiations', 'cooperatives', 'benefits', 'notifications', 'audit', 'settings'])
 const roles = new Set(['CUSTOMER', 'MERCHANT_OWNER', 'MERCHANT_STAFF', 'COURIER', 'RELAY_PARTNER', 'SUPPORT_AGENT', 'ADMIN', 'SUPER_ADMIN'])
@@ -30,15 +31,17 @@ export function validateLocalFixtureManifest(value: unknown): LocalFixtureManife
   const accounts = value.accounts.map(account => {
     if (!object(account) || !identifier(account.id) || accountIds.has(account.id) || !text(account.name, 200) || !text(account.email, 254) || !account.email.toLowerCase().endsWith('.invalid') || !text(account.purpose, 1000) || !Array.isArray(account.roles) || !account.roles.length || account.roles.some(role => typeof role !== 'string' || !roles.has(role))) return invalid()
     accountIds.add(account.id)
-    return { id: account.id, name: account.name, email: account.email, roles: [...account.roles] as string[], purpose: account.purpose }
+    return { ...(typeof account.publicReference === "string" && isValidReference(account.publicReference, "USER") ? { publicReference: account.publicReference } : {}), id: account.id, name: account.name, email: account.email, roles: [...account.roles] as string[], purpose: account.purpose }
   })
   const scenarios = value.scenarios.map(scenario => {
     if (!object(scenario) || !identifier(scenario.id) || scenarioIds.has(scenario.id) || !text(scenario.title, 200) || !text(scenario.summary, 2000) || typeof scenario.category !== 'string' || !categories.has(scenario.category) || !Array.isArray(scenario.nextActions) || scenario.nextActions.length > 30 || scenario.nextActions.some(action => !text(action, 1000))) return invalid()
     scenarioIds.add(scenario.id)
-    return { id: scenario.id, title: scenario.title, summary: scenario.summary, category: scenario.category as FixtureScenario['category'], resourceIds: map(scenario.resourceIds, false), nextActions: [...scenario.nextActions] as string[], credentials: map(scenario.credentials, true) }
+    return { id: scenario.id, title: scenario.title, summary: scenario.summary, category: scenario.category as FixtureScenario['category'], resourceIds: map(scenario.resourceIds, false), ...(scenario.resourceReferences === undefined ? {} : { resourceReferences: references(scenario.resourceReferences) }), nextActions: [...scenario.nextActions] as string[], credentials: map(scenario.credentials, true) }
   })
   return { environment: 'LOCAL_FIXTURE', namespace: 'local-ops-v1', version: 1, seededAt: value.seededAt as string | null, accounts, scenarios, note: value.note }
 }
 export async function readLocalFixtures(request: AdminControlRequest): Promise<LocalFixtureManifest> {
   return validateLocalFixtureManifest(await request<unknown>('/api/admin/local-fixtures'))
 }
+
+function references(value: unknown): Record<string, string> { if (value === undefined) return {}; if (!object(value)) return invalid(); return Object.fromEntries(Object.entries(value).map(([key, item]) => { if (typeof item !== "string" || !isValidReference(item) || privateKey.test(key)) return invalid(); return [key, item]; })); }

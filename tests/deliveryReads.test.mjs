@@ -8,7 +8,7 @@ test('delivery view renders the refreshed API state for the same order', async (
       assert.equal(path, '/api/admin/web/deliveries')
       return {
         missions: [{
-          id: 'mission-1', deliveryCode: 'delivery-1', orderId: 'order-1',
+          id: 'mission-1', deliveryCode: 'delivery-1', orderId: 'order-1', publicReference:'DZ9-X8W-7P3', orderReference:'C12-345-6E6', courierReference:'TZ9-X8W-791',
           courierId: 'courier-1', deliveryMode: 'STANDARD', destinationType: 'CUSTOMER_ADDRESS',
           status, updatedAt: '2026-11-07T10:00:00Z',
         }],
@@ -17,8 +17,8 @@ test('delivery view renders the refreshed API state for the same order', async (
     })
     const row = groups[0].rows[0]
     assert.equal(row.id, 'mission-1')
-    assert.match(row.cells[0], /order-1/)
-    assert.match(row.cells[1], /courier-1/)
+    assert.match(row.cells[0], /C12-345-6E6/)
+    assert.match(row.cells[1], /TZ9-X8W-791/)
     assert.match(row.cells[2].toLowerCase(), new RegExp(status.toLowerCase().replaceAll('_', ' ')))
   }
 })
