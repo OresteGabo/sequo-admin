@@ -19,6 +19,8 @@ const server = http.createServer(async (req,res) => {
   let result = {};
   if (req.url === '/api/auth/me') result = {id:'admin-fixture',email:'fixture@example.invalid',active:true,roles:['ADMIN'],provider:'EMAIL'};
   else if (req.url === '/api/admin/web/deliveries') result = {missions:[mission()],merchantSubOrderCounts:{PACKED_READY:1}};
+  else if (req.url === '/api/delivery/missions') result = [mission()];
+  else if (req.url === '/api/delivery/missions/mode-mission') result = mission();
   else if (req.url.endsWith('/assign-policy')) {
     assert.equal(req.method,'POST'); assert.equal(req.headers.authorization,'Bearer fixture-access'); posts++;
     if (reject) {res.statusCode=409;result={message:'No courier capacity'};}
@@ -38,12 +40,18 @@ const server = http.createServer(async (req,res) => {
     await page.evaluate(()=>[...document.querySelectorAll('.nav-button strong')].find(b=>b.textContent.trim()==='Deliveries').closest('button').click());
     await page.waitForFunction(()=>document.body.innerText.includes('LOCAL_FIXTURE_ONLY'));
     const input = await page.$('input[maxlength="128"]'); await input.type('mode-mission');
-    async function clickAssign(){await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Assign available courier')).click());}
-    await clickAssign();await page.waitForFunction(()=>document.body.innerText.includes('salary-fixture'));
+    async function clickByText(selector,text) { await page.evaluate((selector,text)=>[...document.querySelectorAll(selector)].find(b=>b.textContent.includes(text)).click(),selector,text); }
+    async function clickAssign(){
+      await clickByText('button','Assign available courier');
+      await page.waitForFunction(()=>document.querySelector('[aria-label="Choose service action"]')?.value==='assign-policy');
+      await page.evaluate(()=>{const input=[...document.querySelectorAll('.action-form label')].find(l=>l.textContent.includes('Assignment reason')).querySelector('textarea');input.value='Local fixture dispatch review';input.dispatchEvent(new Event('input',{bubbles:true}));});
+      await clickByText('.action-form button','Review action');await page.waitForSelector('.confirm-dialog');
+      await clickByText('.confirm-dialog button','Confirm action');
+    }
+    await clickAssign();await page.waitForFunction(()=>document.body.innerText.includes('salary-fixture') && document.body.innerText.includes('Action confirmed'));
     assert.equal(posts,1);
-    await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent.includes('Assign available courier') && !b.disabled));
-    reject=true;await clickAssign();await page.waitForFunction(()=>document.body.innerText.includes('Assignment was not confirmed'));
-    reject=false;expired=true;await clickAssign();await page.waitForFunction(()=>!document.body.innerText.includes('salary-fixture'));
-    assert.deepEqual(errors,[]);console.log('PASS: authenticated built admin UI renders mode/ETA/price, submits policy assignment, reports capacity rejection and clears expired sessions. Mock HTTP only.');
+    reject=true;await clickAssign();await page.waitForFunction(()=>document.body.innerText.includes('No courier capacity'));
+    reject=false;expired=true;await clickByText('.pending-action-tools button','Review exact retry');await clickByText('.confirm-dialog button','Confirm action');await page.waitForFunction(()=>!document.body.innerText.includes('salary-fixture'));
+    assert.deepEqual(errors,[]);console.log('PASS: authenticated built admin UI renders mode/ETA/price, reviews reason and policy assignment, reports capacity rejection, preserves exact retries and clears expired sessions. Mock HTTP only.');
   } finally {await browser.close();server.close();}
 })().catch(error=>{console.error(error);server.close();process.exitCode=1});

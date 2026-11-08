@@ -115,7 +115,7 @@ const server = http.createServer(async (req,res) => {
     for(const token of ['nonadmin-fixture',null]) {
       const another=await browser.newPage();await another.setRequestInterception(true);another.on('request',r=>r.url().startsWith('http://127.0.0.1:')?r.continue():r.abort());
       if(token)await another.evaluateOnNewDocument(token=>sessionStorage.setItem('sequo_admin_access_token',token),token);
-      const before=groupingReads;await another.goto(`http://127.0.0.1:${server.address().port}/`);await another.waitForSelector('.login-panel');assert.equal(await another.$('.consolidation-operations'),null);assert.equal(groupingReads,before);await another.close();
+      const before=groupingReads;await another.goto(`http://127.0.0.1:${server.address().port}/`);await another.waitForSelector('.auth-shell');assert.equal(await another.$('.consolidation-operations'),null);assert.equal(groupingReads,before);await another.close();
     }
     assert.deepEqual(errors,[]);console.log('PASS: cooperative approval with JSON-preserving auth refresh, rejected grouping with stable retry ID and server-returned manifest ID, grouping derived server-side, both receipts, prerequisite guards, cancelled confirmations with zero writes, stale/exact-read failure write blocking, frozen full grouping retry, cleared custody draft on manifest switch, saved-action/readback recovery, sealing, one final dispatch, actor history after reload and expired/missing/non-admin session clearing. Mock HTTP only.');
   } finally {await browser.close();server.close();}
