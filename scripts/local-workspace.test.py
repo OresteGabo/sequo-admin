@@ -7,6 +7,7 @@ import socket
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("local_workspace", Path(__file__).with_name("local-workspace.py"))
 workspace = importlib.util.module_from_spec(spec)
@@ -57,6 +58,7 @@ class LocalWorkspaceTest(unittest.TestCase):
             self.assertEqual("jdbc:postgresql://127.0.0.1:55924/sequo_admin_dev", props["spring.datasource.url"])
             self.assertEqual("validate", props["spring.jpa.hibernate.ddl-auto"])
             self.assertEqual("true", props["spring.flyway.enabled"])
+            self.assertEqual("true", props["sequo.admin.local-fixtures.enabled"])
             self.assertEqual("sequo-api-local-admin-fixture", props["sequo.auth.jwt.issuer"])
             self.assertEqual("sequo-admin-local-fixture", props["sequo.auth.jwt.audience"])
             self.assertEqual("LOCAL_FIXTURE", props["sequo.admin.local-access.environment"])
@@ -64,6 +66,12 @@ class LocalWorkspaceTest(unittest.TestCase):
             self.assertEqual("false", props["sequo.settlements.eligibility-scheduler.enabled"])
             self.assertEqual("false", props["sequo.relay.delayed-parcel-scheduler.enabled"])
             self.assertEqual("0", props["sequo.referrals.credit-cfa"])
+
+    def test_check_with_optional_fixture_flag_still_does_not_seed_or_read_private_settings(self):
+        with patch.object(workspace, 'prerequisites', return_value=Path('/fixture/jdk21')), patch.object(workspace, 'run_fixture_seed') as seed, patch.object(workspace, 'load_settings') as private:
+            self.assertEqual(0, workspace.main(['--check', '--with-fixtures']))
+            seed.assert_not_called()
+            private.assert_not_called()
 
     def test_cleanup_stops_only_the_process_started_by_launcher(self):
         with tempfile.TemporaryDirectory() as directory:

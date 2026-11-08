@@ -2,6 +2,7 @@
 """Run an isolated loopback PostgreSQL/API/Vite workspace; never deploy anything."""
 import argparse
 import fcntl
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -105,6 +106,7 @@ def api_properties(settings):
         "spring.jpa.hibernate.ddl-auto": "validate", "spring.flyway.enabled": "true",
         "spring.jpa.open-in-view": "false", "spring.h2.console.enabled": "false",
         "sequo.admin.local-access.enabled": "true",
+        "sequo.admin.local-fixtures.enabled": "true",
         "sequo.admin.local-access.environment": "LOCAL_FIXTURE",
         "sequo.admin.local-access.user-id": settings["fixtureUserId"],
         "sequo.auth.jwt.secret": settings["jwtSecret"],
@@ -269,11 +271,24 @@ def wait_http(url, child, timeout=100, origin=None):
     raise WorkspaceError("Local service did not become ready. Check its private workspace log.")
 
 
+def run_fixture_seed():
+    spec = importlib.util.spec_from_file_location("local_fixtures", Path(__file__).with_name("local-fixtures.py"))
+    client = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(client)
+    try:
+        manifest = client.seed_local_fixtures()
+    except client.FixtureError as error:
+        raise WorkspaceError(str(error)) from None
+    client.print_summary(manifest)
+    return manifest
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Check prerequisites only; do not create files/start services")
     parser.add_argument("--prepare-only", action="store_true", help="Generate private configuration and build API; do not start services")
     parser.add_argument("--online", action="store_true", help="Allow Gradle dependency downloads (default uses cached offline tools)")
+    parser.add_argument("--with-fixtures", action="store_true", help="Explicitly seed guarded local scenarios after startup; never reset existing data")
     parser.add_argument("--no-browser", action="store_true", help="Print the local URL without opening a browser")
     args = parser.parse_args(argv)
     admin = Path(__file__).resolve().parent.parent
@@ -345,12 +360,16 @@ def main(argv=None):
         enabled = json.loads(wait_http(API_URL + "/api/admin-auth/development-access", api_process, origin=WEB_URL))
         if enabled != {"enabled": True, "mode": "LOCAL_DEVELOPMENT"}:
             raise WorkspaceError("The API did not enable its guarded local development access.")
+        if args.with_fixtures:
+            run_fixture_seed()
         vite_env = dict(env, VITE_SEQUO_API_BASE_URL=API_URL)
         require_free_port(WEB_PORT)
         vite = processes.start(["node", str(admin / "node_modules/vite/bin/vite.js"), "--config", str(workspace / "vite.config.mjs"), "--mode", "local-workspace"], workspace, vite_env, workspace / "web.log")
         wait_http(WEB_URL, vite, timeout=40)
         print("Local workspace ready: " + WEB_URL)
-        print("Choose the local development sign-in button. Providers are disconnected; no paid orders are fabricated.")
+        print("Choose the local development sign-in button. Providers remain disconnected; no real payment is executed.")
+        if not args.with_fixtures:
+            print("For optional local practice scenarios, run npm run dev:fixtures in another terminal.")
         print("Ctrl-C stops only these services; the dedicated database volume is retained.")
         if not args.no_browser:
             webbrowser.open(WEB_URL)

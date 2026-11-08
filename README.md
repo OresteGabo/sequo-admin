@@ -83,3 +83,7 @@ Technical configuration belongs in developer docs, not in the visible management
 ## Build Principle
 
 This is not a landing page or developer console. Build it like serious internal software: searchable tables, useful dashboards, plain-language status labels, safe actions, and strong permission boundaries.
+
+## Optional local scenarios
+
+With the isolated workspace running, run `npm run dev:fixtures` from another terminal to install/reuse guarded practice scenarios in its retained database. Or explicitly opt in at startup with `npm run dev:local -- --with-fixtures`. Default startup does not seed them; no reset, account repair or real payment is performed. The development-only guide lists scenario accounts, IDs and test-only proof values. See [Local workspace](docs/LOCAL_WORKSPACE.md#optional-operational-practice-data).
