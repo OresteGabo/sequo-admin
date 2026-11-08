@@ -1,0 +1,182 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import {
+  adminControlCatalog,
+  getAdminControl,
+  buildAdminControlRequest,
+  readAdminControl,
+  runAdminControlAction,
+} from '../src/adminControls.ts'
+
+const groups = ['users', 'merchants', 'catalog', 'riders', 'orders', 'deliveries', 'relay', 'returns', 'payments', 'commissions', 'negotiations', 'cooperatives', 'benefits', 'notifications', 'audit', 'settings']
+
+test('all navigation domains expose supported controls or an explicit capability gap', () => {
+  assert.deepEqual([...new Set(adminControlCatalog.map(control => control.group))].sort(), groups.sort())
+  assert.equal(new Set(adminControlCatalog.map(control => control.id)).size, adminControlCatalog.length)
+  for (const control of adminControlCatalog) {
+    assert.ok(control.description)
+    if (!control.supported) assert.ok(control.reason)
+    else assert.ok(control.read)
+    for (const action of control.actions) {
+      if (!action.supported) assert.ok(action.reason)
+      else assert.ok(action.confirmation)
+      if (action.readback) assert.ok(getAdminControl(action.readback.controlId).read)
+      const names = action.fields.map(field => field.name)
+      assert.equal(names.length, new Set(names).size, `${control.id}/${action.id} duplicate fields`)
+    }
+  }
+})
+
+test('catalog create uses the admin route, safe initial state and only declared fields', () => {
+  assert.deepEqual(buildAdminControlRequest('catalog-products', 'create', {
+    name: ' Rice ', merchantId: 'merchant-a', basePriceCfa: '1400', bargainingEnabled: 'false',
+    idempotencyKey: 'create-1', cameraVerified: true, capturedAtLabel: 'made-up', actorUserId: 'foreign',
+  }), {
+    path: '/api/catalog/products', method: 'POST', body: {
+      merchantId: 'merchant-a', name: 'Rice', kind: 'SellerSpecific', status: 'INACTIVE',
+      basePriceCfa: 1400, bargainingEnabled: false, idempotencyKey: 'create-1',
+    },
+  })
+})
+
+test('path identifiers cannot traverse and query IDs are encoded independently', () => {
+  for (const productId of ['.', '..']) assert.throws(() => buildAdminControlRequest('catalog-products', 'archive', { productId }), /valid resource/)
+  const encoded = buildAdminControlRequest('catalog-products', 'archive', { productId: 'merchant/id?x=#' })
+  assert.equal(encoded.path, '/api/catalog/products/merchant%2Fid%3Fx%3D%23/archive')
+  assert.equal(buildAdminControlRequest('merchant-orders', null, { merchantId: 'a&history=false', history: false }).path,
+    '/api/merchant/sub-orders?merchantId=a%26history%3Dfalse&history=false')
+})
+
+test('optional patch fields never acquire create defaults or overwrite absent fields', () => {
+  assert.deepEqual(buildAdminControlRequest('catalog-products', 'edit', { productId: 'p', bargainingEnabled: false }), {
+    path: '/api/catalog/products/p', method: 'PATCH', body: { bargainingEnabled: false },
+  })
+  assert.deepEqual(buildAdminControlRequest('catalog-products', 'edit', { productId: 'p', detail: 'First line\nSecond line' }).body,
+    { detail: 'First line\nSecond line' })
+  assert.throws(() => buildAdminControlRequest('catalog-products', 'edit', { productId: 'p', detail: 'control\u0000text' }), /invalid/)
+  assert.throws(() => buildAdminControlRequest('catalog-products', 'archive', { productId: 'p\nq' }), /invalid/)
+})
+
+test('number, enum, boolean, required and datetime fields fail closed before transport', () => {
+  for (const value of [-1, 1.5, 'Infinity', false]) assert.throws(() => buildAdminControlRequest('catalog-products', 'create', { name: 'Rice', basePriceCfa: value }), /range|number/)
+  assert.throws(() => buildAdminControlRequest('catalog-products', 'create', { name: 'Rice', kind: 'FOOD' }), /supported choice/)
+  assert.throws(() => buildAdminControlRequest('catalog-products', 'edit', { productId: 'p', bargainingEnabled: 'yes' }), /true or false/)
+  assert.throws(() => buildAdminControlRequest('merchant-orders', null), /Merchant ID is required/)
+  assert.throws(() => buildAdminControlRequest('courier-availability', 'pause', { courierId: 'c', reason: 'Review', pausedUntil: 'not-a-time' }), /valid date/)
+  assert.equal(buildAdminControlRequest('courier-availability', 'pause', { courierId: 'c', reason: 'Review', pausedUntil: '2026-11-08T12:00:00+01:00' }).body.pausedUntil, '2026-11-08T11:00:00.000Z')
+})
+
+test('merchant, dispatch, relay and cooperative mutations use their actual server contracts', () => {
+  assert.deepEqual(buildAdminControlRequest('merchant-orders', 'mark-packed', { subOrderId: 's', merchantId: 'm', packageCount: '2', customerId: 'forged' }), {
+    path: '/api/merchant/sub-orders/s/mark-packed', method: 'POST', body: { merchantId: 'm', packageCount: 2 },
+  })
+  assert.deepEqual(buildAdminControlRequest('delivery-missions', 'assign', { missionId: 'd', courierId: 'c', workforceType: 'SequoSalaried' }), {
+    path: '/api/delivery/missions/d/assign', method: 'POST', body: { courierId: 'c' },
+  })
+  assert.deepEqual(buildAdminControlRequest('relay-parcels', 'review', { parcelId: 'p', eventId: 'e', idempotencyKey: 'k', metadata: 'Inspected\nAwaiting decision', evaluatedAt: '2000-01-01' }), {
+    path: '/api/relay/parcels/p/review', method: 'POST', body: { eventId: 'e', idempotencyKey: 'k', metadata: 'Inspected\nAwaiting decision' },
+  })
+  assert.deepEqual(buildAdminControlRequest('cooperatives', 'review', { cooperativeId: 'g', status: 'APPROVED', reason: 'Verified', actorUserId: 'forged', at: '2000-01-01' }), {
+    path: '/api/admin/cooperatives/g/review', method: 'POST', body: { status: 'APPROVED', reason: 'Verified' },
+  })
+})
+
+test('unsupported provider, tariff, party negotiation and nested editing do not send requests', async () => {
+  let calls = 0
+  const request = async () => { calls++; throw new Error('Must not send') }
+  for (const id of ['provider-money-actions', 'negotiation-oversight', 'user-access-management', 'catalog-media']) {
+    await assert.rejects(readAdminControl(id, {}, request))
+  }
+  await assert.rejects(runAdminControlAction('relay-fees', 'assess', {}, request), /approved tariff/)
+  await assert.rejects(runAdminControlAction('catalog-customizations', 'edit', {}, request), /structured group/)
+  assert.equal(calls, 0)
+})
+
+test('read selectors match real wrapped arrays and provider identity; valid empty arrays stay empty', async () => {
+  const checkouts = await readAdminControl('payment-checkouts', {}, async path => {
+    assert.equal(path, '/api/admin/web/payments?limit=50')
+    return { checkouts: [{ checkoutId: 'co', status: 'PAYMENT_PENDING' }], webhookEvents: [] }
+  })
+  assert.equal(checkouts.rows[0].checkoutId, 'co')
+  const providers = await readAdminControl('payment-providers', {}, async () => [{ providerId: 'YAS', integrationStatus: 'NOT_CONNECTED' }])
+  assert.equal(providers.rows[0].providerId, 'YAS')
+  assert.deepEqual((await readAdminControl('catalog-products', {}, async () => [])).rows, [])
+  const price = await readAdminControl('delivery-pricing', {}, async () => ({ active: { profile: 'CURRENT', minimumDeliveryFeeCfa: 400 } }))
+  assert.equal(price.rows[0].minimumDeliveryFeeCfa, 400)
+})
+
+test('authentication, network, malformed and missing-identity reads never become fabricated empty data', async () => {
+  for (const status of [401, 403, 500]) {
+    const failure = new Error(`HTTP ${status}`)
+    await assert.rejects(readAdminControl('catalog-products', {}, async () => { throw failure }), error => error === failure)
+  }
+  for (const malformed of [null, {}, ['fake'], [null], [{ name: 'missing ID' }]]) {
+    await assert.rejects(readAdminControl('catalog-products', {}, async () => malformed), /server response/)
+  }
+  await assert.rejects(readAdminControl('payment-checkouts', {}, async () => ({ checkouts: null })), /server response/)
+})
+
+test('mutation is sent once without automatic refresh replay and readback preserves server state', async () => {
+  const calls = []
+  const result = await runAdminControlAction('merchant-orders', 'start-preparation', { subOrderId: 's', merchantId: 'm' }, async (...args) => {
+    calls.push(args)
+    return args[2] === 'POST' ? { id: 's', status: 'PREPARING' } : { id: 's', status: 'PREPARING', packageCount: 1 }
+  })
+  assert.deepEqual(calls[0], ['/api/merchant/sub-orders/s/start-preparation', false, 'POST', { merchantId: 'm' }])
+  assert.deepEqual(calls[1], ['/api/merchant/sub-orders/s'])
+  assert.equal(result.readback.rows[0].status, 'PREPARING')
+  assert.equal(result.readbackError, null)
+})
+
+test('write rejection propagates without readback; successful write plus failed readback remains an acknowledged partial result', async () => {
+  let calls = 0
+  const rejection = new Error('Payment not validated')
+  await assert.rejects(runAdminControlAction('merchant-orders', 'accept', { subOrderId: 's', merchantId: 'm' }, async () => { calls++; throw rejection }), error => error === rejection)
+  assert.equal(calls, 1)
+  const result = await runAdminControlAction('merchant-orders', 'accept', { subOrderId: 's', merchantId: 'm' }, async (_path, _retry, method) => {
+    calls++
+    if (method === 'POST') return { id: 's', status: 'ACCEPTED' }
+    throw new Error('Offline')
+  })
+  assert.equal(calls, 3)
+  assert.equal(result.acknowledged, true)
+  assert.equal(result.readback, null)
+  assert.match(result.readbackError, /acknowledged.*readback failed/)
+})
+
+test('eligibility evaluation sends no client timestamp or provider instruction', () => {
+  assert.deepEqual(buildAdminControlRequest('payout-eligibility', 'evaluate', { evaluatedAt: '2099-01-01', amountCfa: 900000, provider: 'YAS', markPaid: true }), {
+    path: '/api/settlements/merchant-payouts/evaluate-eligible', method: 'POST',
+  })
+  assert.deepEqual(buildAdminControlRequest('notification-inbox', 'unarchive', { messageId: 'n' }), {
+    path: '/api/notifications/inbox/n/archive', method: 'DELETE',
+  })
+})
+
+
+test('guarded workforce and relay changes preserve exact server revisions and require stable keys', () => {
+  const revision = '2026-11-08T12:00:00.123456789Z'
+  const values = { courierId: 'c', workforceType: 'Freelancer', expectedUpdatedAt: revision, reason: 'Approved contract change', idempotencyKey: 'workforce-key-1' }
+  assert.deepEqual(buildAdminControlRequest('couriers', 'workforce', values), {
+    path: '/api/admin/web/couriers/c/workforce', method: 'PUT', body: {
+      workforceType: 'Freelancer', expectedUpdatedAt: revision, reason: 'Approved contract change', idempotencyKey: 'workforce-key-1',
+    },
+  })
+  assert.throws(() => buildAdminControlRequest('couriers', 'workforce', { ...values, expectedUpdatedAt: '' }), /revision.*required/)
+  assert.throws(() => buildAdminControlRequest('couriers', 'workforce', { ...values, idempotencyKey: '' }), /retry key.*required/)
+  assert.deepEqual(buildAdminControlRequest('relay-site-management', 'remove-operator', {
+    relayPointId: 'site', expectedUpdatedAt: revision, reason: 'Approved reassignment', idempotencyKey: 'relay-key-1', operatorUserId: 'not-sent',
+  }), {
+    path: '/api/admin/web/relay-sites/site/operator', method: 'DELETE', body: {
+      expectedUpdatedAt: revision, reason: 'Approved reassignment', idempotencyKey: 'relay-key-1',
+    },
+  })
+  assert.deepEqual(getAdminControl('couriers').actions[0].allowedRoles, ['ADMIN', 'SUPER_ADMIN'])
+})
+
+test('exact detail reads reject a different resource including nested admin projections', async () => {
+  await assert.rejects(readAdminControl('merchant-order-detail', { subOrderId: 'mine' }, async () => ({ id: 'other' })), /different resource/)
+  await assert.rejects(readAdminControl('courier-detail', { courierId: 'mine' }, async () => ({ courier: { id: 'other' } })), /different resource/)
+  const order = await readAdminControl('order-detail', { orderId: 'order-1' }, async () => ({ order: { id: 'order-1' }, lines: [], snapshotState: 'UNAVAILABLE_LEGACY', history: [] }))
+  assert.equal(order.rows[0].snapshotState, 'UNAVAILABLE_LEGACY')
+})
