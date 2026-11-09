@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { inspectForbiddenSession } from "./forbiddenSession";
 import { referenceText, clearAdminReferenceCache, referenceSearchQuery } from "./adminReferences";
 import {
   computed,
@@ -1342,29 +1343,19 @@ async function apiRequest<T>(
     clearSession();
     authError.value = "Your session ended. Please sign in again.";
   } else if (response.status === 403) {
-    // A forbidden action is not necessarily an ended admin session. Recheck actual role access.
-    let stillAdmin = false;
-    try {
+    const diagnostic = await inspectForbiddenSession(async () => {
       const check = await fetch(`${apiBaseUrl}/api/auth/me`, {
         cache: "no-store",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${accessToken.value}`,
-        },
+        headers: { Accept: "application/json", Authorization: `Bearer ${accessToken.value}` },
       });
-      const user = check.ok ? ((await check.json()) as CurrentUser) : null;
-      stillAdmin = Boolean(
-        user?.active &&
-        Array.isArray(user.roles) &&
-        user.roles.some((role) => ["ADMIN", "STAFF_MANAGER", "SUPER_ADMIN"].includes(role)),
-      );
-    } catch {
-      stillAdmin = false;
-    }
+      return { status: check.status, user: check.ok ? await check.json() : undefined };
+    }, async () => token !== accessToken.value || await refreshSession(), retryAfterRefresh && Boolean(refreshToken.value));
     if (version !== sessionVersion) throw new Error("session_changed");
-    if (!stillAdmin) {
+    if (diagnostic === "retry") return apiRequest<T>(path, false, method, body);
+    if (diagnostic === "unavailable") throw new Error("The permission check could not finish. Please retry when the service is available.");
+    if (diagnostic === "ended" || diagnostic === "not_admin") {
       clearSession();
-      authError.value = "This account is not allowed to use SEQUO Admin.";
+      authError.value = diagnostic === "ended" ? "Your session ended. Please sign in again." : "This account is not allowed to use SEQUO Admin.";
     }
   }
   if (!response.ok) {
