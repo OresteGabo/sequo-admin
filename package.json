@@ -15,7 +15,8 @@
     "dev:fixtures": "python3 scripts/local-fixtures.py",
     "test:permissions": "node --experimental-strip-types --test scripts/admin-permissions.test.mjs",
     "test:owner-directory": "node --experimental-strip-types --test scripts/owner-directory.test.mjs",
-    "test:session": "node --experimental-strip-types --test scripts/forbidden-session.test.mjs"
+    "test:session": "node --experimental-strip-types --test scripts/forbidden-session.test.mjs",
+    "test:partner-onboarding": "node --experimental-strip-types --test scripts/partner-onboarding.test.mjs"
   },
   "dependencies": {
     "vue": "^3.5.42"

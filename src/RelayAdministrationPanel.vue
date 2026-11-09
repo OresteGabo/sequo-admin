@@ -8,7 +8,7 @@ import { relayAcknowledged, relayConfirmed, relayIntent, validRelayIntent, parse
 type Request = <T>(path: string, retryAfterRefresh?: boolean, method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: unknown) => Promise<T>
 type Mission = { id: string; orderId: string; relayPointId: string | null; status: string; destinationType: string; pickupAt: string | null; updatedAt: string; courierId: string | null }
 const missionField: AdminControlField = { name: 'missionId', label: 'Delivery mission', type: 'string', location: 'path', required: true, maxLength: 128 }
-const props = defineProps<{ request: Request; actorId: string; roles: readonly string[] }>()
+const props = defineProps<{ request: Request; actorId: string; roles: readonly string[]; managedOnboarding?: boolean }>()
 const canManageSite = computed(() => canManagePersonnel(props.roles))
 const emit = defineEmits<{ changed: [] }>()
 const storageKey = `sequo_relay_admin_pending:${props.actorId}`
@@ -88,6 +88,8 @@ function discard() {
   if (pending.value && window.confirm('Discard only the saved local retry? This does not undo any server action. Review server history before creating a different action.')) { save(null); void run(() => load()) }
 }
 onMounted(() => { if (pending.value) reason.value = String(pending.value.body.reason); void run(() => load(pending.value?.siteId ?? '')) })
+async function openSite(id: string) { siteId.value=id; await run(() => load(id)) }
+defineExpose({ openSite });
 </script>
 <template>
   <section class="detail-card relay-administration">
@@ -99,8 +101,8 @@ onMounted(() => { if (pending.value) reason.value = String(pending.value.body.re
     <label>Recorded relay<select v-model="siteId" :disabled="busy || !!pending" @change="chooseSite"><option value="">Choose a site</option><option v-for="site in rows" :key="site.id" :value="site.id">{{ site.name }} · {{ site.status }}</option></select></label>
     <p v-if="!canManageSite" class="subtle">Staff managers and owners manage relay locations. Operations can manage existing storage availability and delivery receipt.</p>
     <p v-if="!busy && !rows.length">No relay sites are recorded. Create the first site, then assign an existing authorized operator through relay management.</p>
-    <button v-if="canManageSite" :disabled="busy || !!pending" @click="newSite">Prepare new site</button>
-    <form v-if="canManageSite" @submit.prevent="submitSite">
+    <button v-if="canManageSite && !managedOnboarding" :disabled="busy || !!pending" @click="newSite">Prepare new site</button>
+    <form v-if="canManageSite && (selected || !managedOnboarding)" @submit.prevent="submitSite">
       <fieldset :disabled="busy || !!pending || stale"><legend>{{ selected ? 'Recorded site details' : 'New relay site' }}</legend>
         <label>Name<input v-model="name" required maxlength="120"></label><div class="coordinates"><label>Latitude<input v-model="latitude" inputmode="decimal" required></label><label>Longitude<input v-model="longitude" inputmode="decimal" required></label></div>
         <label>City<input v-model="city" maxlength="128"></label><label>Neighborhood<input v-model="neighborhood" maxlength="128"></label><label>Landmark / access instructions<input v-model="landmark" maxlength="500"></label>

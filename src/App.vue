@@ -26,7 +26,8 @@ import OperationsControlPanel from "./OperationsControlPanel.vue";
 import LocalFixtureGuide from "./LocalFixtureGuide.vue";
 import AdminProductMediaPanel from "./AdminProductMediaPanel.vue";
 import { adminTierLabel, canManagePersonnel } from "./adminPermissions";
-import AdminEnrollmentPanel from "./AdminEnrollmentPanel.vue";
+import PartnerOnboardingPanel from "./PartnerOnboardingPanel.vue";
+import type { PartnerOperation } from "./partnerOnboarding";
 import RelayAdministrationPanel from "./RelayAdministrationPanel.vue";
 
 type SectionId =
@@ -1833,6 +1834,12 @@ function refreshWorkspace() {
       break;
   }
 }
+const relayAdministration = ref<InstanceType<typeof RelayAdministrationPanel> | null>(null);
+async function openPartnerSettings(operation: PartnerOperation) {
+  if (!operation.entityId) return;
+  if (operation.kind === 'HUB') await relayAdministration.value?.openSite(operation.entityId);
+  else await serviceControls.value?.openControl(operation.kind === 'VENDOR' ? 'merchant-store-settings' : 'courier-detail', { [operation.kind === 'VENDOR' ? 'merchantId' : 'courierId']: operation.entityId });
+}
 function onControlChanged() {
   refreshWorkspace();
 }
@@ -3027,13 +3034,12 @@ function onWorkspaceLocation() {
             </template>
           </article>
 
-          <AdminEnrollmentPanel
-            v-if="currentUser && canManagePersonnel(currentUser.roles) && (active.id === 'merchants' || active.id === 'riders')"
+          <PartnerOnboardingPanel
+            v-if="currentUser && canManagePersonnel(currentUser.roles) && ['merchants','riders','relay'].includes(active.id)"
             :key="`${currentUser.id}:${active.id}`"
-            :kind="active.id === 'merchants' ? 'merchant' : 'courier'"
-            :request="apiRequest"
-            :actor-id="currentUser.id"
-            @changed="onControlChanged"
+            :kind="active.id === 'merchants' ? 'VENDOR' : active.id === 'riders' ? 'RIDER' : 'HUB'"
+            :request="apiRequest" :actor-id="currentUser.id"
+            @changed="onControlChanged" @manage="openPartnerSettings"
           />
           <AdminProductMediaPanel
             v-if="currentUser && active.id === 'catalog'"
@@ -3044,6 +3050,8 @@ function onWorkspaceLocation() {
             @changed="onControlChanged"
           />
           <RelayAdministrationPanel
+            ref="relayAdministration"
+            :managed-onboarding="currentUser ? canManagePersonnel(currentUser.roles) : false"
             v-if="currentUser && active.id === 'relay'"
             :key="currentUser.id"
             :request="apiRequest"
