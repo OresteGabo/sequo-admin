@@ -8,6 +8,7 @@ import CatalogOptionsEditor from "./CatalogOptionsEditor.vue";
 import MerchantStoreEditor from "./MerchantStoreEditor.vue";
 import {
   adminControlCatalog,
+  adminControlsFor,
   readAdminControl,
   runAdminControlAction,
   buildAdminControlRequest,
@@ -27,7 +28,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ changed: [] }>();
 const services = computed(() =>
-  adminControlCatalog.filter((item) => item.group === props.category),
+  adminControlsFor(props.category, props.roles),
 );
 const selectedId = ref("");
 const selected = computed(
@@ -72,6 +73,7 @@ const relatedControls = computed(() => {
   const row = selectedRecord.value;
   const links: Record<string, { id: string; key: string; label: string }[]> = {
     users: [
+      { id: "owner-accounts", key: "userId", label: "Edit personnel profile" },
       {
         id: "user-access-management",
         key: "userId",
@@ -79,6 +81,7 @@ const relatedControls = computed(() => {
       },
     ],
     merchants: [
+      { id: "owner-merchants", key: "merchantId", label: "Edit / remove vendor" },
       {
         id: "merchant-store-settings",
         key: "merchantId",
@@ -93,9 +96,11 @@ const relatedControls = computed(() => {
       },
     ],
     couriers: [
+      { id: "owner-couriers", key: "courierId", label: "Edit / remove rider" },
       { id: "courier-detail", key: "courierId", label: "Rider history" },
     ],
     "relay-site-management": [
+      { id: "owner-hubs", key: "relayPointId", label: "Remove / restore hub" },
       {
         id: "relay-site-detail",
         key: "relayPointId",

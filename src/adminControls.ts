@@ -1,3 +1,4 @@
+import { hasAdminRole } from './adminPermissions.ts'
 import { hasAdminReference } from './adminReferences.ts'
 import { merchantStoreControl } from './merchantStore.ts'
 
@@ -24,7 +25,7 @@ export type AdminControlAction = {
   confirmation: string; readback?: { controlId: string; values?: Record<string, string> }
 }
 export type AdminControlDescriptor = {
-  id: string; group: AdminControlGroup; label: string; description: string; supported: boolean; reason?: string
+  id: string; group: AdminControlGroup; label: string; description: string; supported: boolean; reason?: string; allowedRoles?: readonly string[]
   read?: AdminControlRead; actions: readonly AdminControlAction[]
 }
 export type AdminControlReadResult = { controlId: string; data: unknown; rows: Record<string, unknown>[] }
@@ -66,7 +67,32 @@ const productPatchFields: readonly AdminControlField[] = [idField('productId', '
   .filter(field => field.name !== 'merchantId' && field.name !== 'kind')
   .map(field => ({ ...field, required: false, defaultValue: undefined, valueFrom: field.name === 'basePriceCfa' ? 'priceCfa' : field.name }))]
 
+const directoryGuard = [
+  { ...bodyText('expectedUpdatedAt', 'Current record revision'), valueFrom: 'record.updatedAt', maxLength: 64 },
+  { ...bodyText('reason', 'Reason for this change'), maxLength: 1000 }, keyField,
+]
+const ownerProfile = (kind: 'accounts' | 'merchants' | 'couriers' | 'hubs', group: AdminControlGroup, label: string, field: string): AdminControlDescriptor => {
+  const reference = idField(field, `${label} reference`, 'path', 'record.id')
+  const path = `/api/admin/web/directory/${kind}/{${field}}`
+  const edits: AdminControlField[] = kind === 'couriers'
+    ? [{ ...choice('vehicleType', 'Vehicle', ['Moto', 'Bicycle', 'Car', 'Van']), valueFrom: 'record.vehicleType' }]
+    : kind === 'hubs' ? [] : [{ ...bodyText('name', kind === 'accounts' ? 'Display name' : 'Vendor name'), maxLength: 160, valueFrom: 'record.name' }]
+  const actions: AdminControlAction[] = edits.length ? [{ id: 'edit', label: 'Save profile changes', supported: true, allowedRoles: ['SUPER_ADMIN'], method: 'PATCH', path,
+    fields: [reference, ...edits, ...directoryGuard], confirmation: 'Save the reviewed profile details? Login email, phone, financial records and past orders are preserved.', readback: { controlId: `owner-${kind}` } }] : []
+  if (kind !== 'accounts') {
+    actions.push({ id: 'archive', label: `Remove ${label.toLowerCase()} from service`, supported: true, allowedRoles: ['SUPER_ADMIN'], method: 'DELETE', path,
+      fields: [reference, ...directoryGuard], confirmation: 'Remove this profile from service? Active work must be resolved first. Its history remains available and it can be restored later.', readback: { controlId: `owner-${kind}` } },
+    { id: 'restore', label: `Restore ${label.toLowerCase()} to service`, supported: true, allowedRoles: ['SUPER_ADMIN'], method: 'PATCH', path,
+      fields: [reference, { ...choice('status', 'Restored profile state', ['ACTIVE']), defaultValue: 'ACTIVE' }, ...directoryGuard], confirmation: 'Restore this profile for future service? An active account with the required personnel role must already be assigned.', readback: { controlId: `owner-${kind}` } })
+  }
+  return { id: `owner-${kind}`, group, label: `${label} profile and removal`, supported: true, allowedRoles: ['SUPER_ADMIN'],
+    description: kind === 'accounts' ? 'Edit a personnel display name here. Use Account access and roles to suspend or restore access, remove roles, or appoint administrators. Email and phone changes require identity verification.'
+      : `Edit and remove ${label.toLowerCase()} profiles from service while keeping their orders, earnings and actor history. Resolve active work before removal. ${kind === 'hubs' ? 'Use hub setup above to change the name, address and storage slots.' : kind === 'couriers' ? 'Use Riders and workforce for contract classification; edit the linked account in Users to change the name.' : 'Use Store location and opening hours for shop address and schedules.'}`,
+    read: { path, fields: [reference], shape: 'record', rowId: 'record.id', columns: cols('record.id', 'record.name', 'record.email', 'record.phoneNumber', 'record.userId', 'record.ownerUserId', 'record.status', 'record.roles', 'record.vehicleType', 'record.updatedAt', 'history') }, actions }
+}
+
 export const adminControlCatalog: readonly AdminControlDescriptor[] = [
+
   {
     id: 'catalog-products', group: 'catalog', label: 'Products', supported: true,
     description: 'Live catalog including inactive records for authorized administrators. Server policy controls publishing and product photos.',
@@ -88,6 +114,7 @@ export const adminControlCatalog: readonly AdminControlDescriptor[] = [
     read: { path: '/api/admin/web/couriers', shape: 'list', rowId: 'id', columns: cols('displayName', 'status', 'workforceType', 'activeMissionCount', 'updatedAt') },
     actions: [{ id: 'workforce', label: 'Change recorded workforce', supported: true, allowedRoles: ['STAFF_MANAGER', 'SUPER_ADMIN'], method: 'PUT', path: '/api/admin/web/couriers/{courierId}/workforce', fields: [idField('courierId', 'Courier ID'), { ...choice('workforceType', 'Workforce', ['SequoSalaried', 'Freelancer']), valueFrom: 'workforceType' }, { ...bodyText('expectedUpdatedAt', 'Current server revision'), valueFrom: 'updatedAt', maxLength: 64, description: 'Exact updatedAt value from the selected server record; do not change or round it.' }, { ...bodyText('reason', 'Change reason'), maxLength: 1000 }, keyField], confirmation: 'Change this existing rider’s workforce classification? Confirm authorization and current assignments. Existing missions and recorded earnings retain their historical workforce.', readback: { controlId: 'courier-detail' } }],
   },
+  ownerProfile('couriers', 'riders', 'Rider', 'courierId'),
   { id: 'courier-detail', group: 'riders', label: 'Rider detail and workforce history', supported: true, description: 'Recorded availability, remuneration summary and actor history. Provider transfers remain unavailable until integrated.', read: { path: '/api/admin/web/couriers/{courierId}', fields: [idField('courierId', 'Courier ID')], shape: 'record', rowId: 'courier.id', columns: cols('courier.displayName', 'courier.status', 'courier.workforceType', 'payOverview', 'history') }, actions: [] },
   {
     id: 'relay-site-management', group: 'relay', label: 'Relay sites and assigned operators', supported: true, description: 'Existing relay sites and current operator assignments. Reassign only an authorized existing operator; an assignment does not grant a role or create an account.',
@@ -97,15 +124,31 @@ export const adminControlCatalog: readonly AdminControlDescriptor[] = [
       { id: 'remove-operator', label: 'Remove relay operator assignment', supported: true, allowedRoles: ['STAFF_MANAGER', 'SUPER_ADMIN'], method: 'DELETE', path: '/api/admin/web/relay-sites/{relayPointId}/operator', fields: [idField('relayPointId', 'Relay site ID'), { ...bodyText('expectedUpdatedAt', 'Current server revision'), valueFrom: 'updatedAt', maxLength: 64 }, { ...bodyText('reason', 'Removal reason'), maxLength: 1000 }, keyField], confirmation: 'Remove the operator assignment from this relay site? Existing parcel and actor history is retained.', readback: { controlId: 'relay-site-detail' } },
     ],
   },
+  ownerProfile('hubs', 'relay', 'Hub', 'relayPointId'),
   { id: 'relay-logical-slots', group: 'relay', label: 'Logical storage slots', supported: true, description: 'Recorded storage slot availability and reason at an existing site. This read does not control locks or physical hardware.', read: { path: '/api/admin/web/relay-sites/{relayPointId}/slots', fields: [idField('relayPointId', 'Relay site ID')], shape: 'list', rowId: 'id', columns: cols('lockerCode', 'status', 'availabilityReason', 'expectedAvailableAt', 'updatedAt') }, actions: [] },
   { id: 'relay-site-detail', group: 'relay', label: 'Relay assignment history', supported: true, description: 'Persisted relay site assignment and actor/reason/retry history.', read: { path: '/api/admin/web/relay-sites/{relayPointId}', fields: [idField('relayPointId', 'Relay site ID')], shape: 'record', rowId: 'site.id', columns: cols('site.name', 'site.status', 'site.operatorDisplayName', 'history') }, actions: [] },
 
   adminRead('users', 'users', 'Accounts', '/api/admin/web/users', cols('displayName', 'email', 'phoneNumber', 'status', 'active', 'roles', 'createdAt')),
+  { id: 'owner-create-personnel', group: 'users', label: 'Add personnel account', supported: true, allowedRoles: ['SUPER_ADMIN'],
+    description: 'Create a new account with an approved email or phone number and role. Administrators need an email for website sign-in. The person must complete normal sign-in with their own contact details. After adding a vendor owner or rider, register the shop or delivery profile in Merchants or Riders; assign hub operators in Relay points. Existing accounts must be managed through Account access and roles.',
+    actions: [{ id: 'create', label: 'Add approved personnel', supported: true, allowedRoles: ['SUPER_ADMIN'], method: 'POST', path: '/api/admin/web/directory/accounts',
+      fields: [{ ...bodyText('email', 'Approved email address', false), maxLength: 254 }, { ...bodyText('phoneNumber', 'Phone with country code', false), maxLength: 32, placeholder: '+228…' }, { ...bodyText('displayName', 'Display name'), maxLength: 160 },
+        choice('roleCode', 'Personnel role', ['MERCHANT_OWNER', 'MERCHANT_STAFF', 'COURIER', 'RELAY_PARTNER', 'ADMIN', 'STAFF_MANAGER', 'SUPER_ADMIN']),
+        { ...bodyText('reason', 'Reason and authorization'), maxLength: 1000 }, keyField],
+      confirmation: 'Create this account with the selected role? Owner access can appoint or suspend other administrators. Confirm the exact email and approved tier. No invitation email is sent automatically.' }] },
+  ownerProfile('accounts', 'users', 'Personnel', 'userId'),
   {
     id: 'user-access-management', group: 'users', label: 'Account access and roles', supported: true,
     description: 'Inspect an existing account and audited access history. Staff managers approve or suspend operational personnel. Only owners manage administrator access or roles. Self changes, pending/deleted identity promotion and removal of the last active SUPER_ADMIN are denied. Changes invalidate old sessions.',
     read: { path: '/api/admin/web/users/{userId}/access', fields: [idField('userId', 'User ID')], shape: 'record', rowId: 'user.id', columns: cols('user.displayName', 'user.status', 'user.active', 'user.roles', 'user.updatedAt', 'memberships', 'history') },
     actions: [
+      ...[['suspend', 'Suspend personnel access', false, 'SUSPENDED'], ['restore', 'Restore personnel access', true, 'ACTIVE']].map(([id, label, active, status]): AdminControlAction => ({
+        id: id as string, label: label as string, supported: true, allowedRoles: ['STAFF_MANAGER', 'SUPER_ADMIN'], method: 'PUT', path: '/api/admin/web/users/{userId}/access',
+        fields: [idField('userId', 'User ID', 'path', 'user.id'), { name: 'active', label: 'Account active', type: 'boolean', location: 'body', required: true, defaultValue: active as boolean },
+          { ...choice('status', 'Account status', [status as string]), defaultValue: status as string }, { ...bodyText('expectedUpdatedAt', 'Current server revision'), valueFrom: 'user.updatedAt', maxLength: 64 },
+          { ...bodyText('reason', 'Personnel access reason'), maxLength: 1000 }, keyField],
+        confirmation: active ? 'Restore this person’s account access? They must sign in again. Existing assignments and role restrictions still apply.' : 'Suspend this person’s access and invalidate their current sessions? Their account and operational history are retained. Assigned hubs and sole vendor ownership must be reassigned first.',
+        readback: { controlId: 'user-access-management' } })),
       { id: 'access', label: 'Change account access', supported: true, allowedRoles: ['STAFF_MANAGER', 'SUPER_ADMIN'], method: 'PUT', path: '/api/admin/web/users/{userId}/access', fields: [idField('userId', 'User ID', 'path', 'user.id'), { name: 'active', label: 'Account active', type: 'boolean', location: 'body', required: true, valueFrom: 'user.active' }, { ...choice('status', 'Account status', ['ACTIVE', 'LOCKED', 'SUSPENDED']), valueFrom: 'user.status' }, { ...bodyText('expectedUpdatedAt', 'Current server revision'), valueFrom: 'user.updatedAt', maxLength: 64 }, { ...bodyText('reason', 'Access change reason'), maxLength: 1000 }, keyField], confirmation: 'Change this existing account’s access and revoke its prior sessions? Assigned relay operators must be unbound first; a sole merchant owner needs an authorized replacement.', readback: { controlId: 'user-access-management' } },
       ...[['grant-role', 'Grant account role', 'PUT'], ['revoke-role', 'Revoke account role', 'DELETE']].map(([action, label, method]): AdminControlAction => ({ id: action!, label: label!, supported: true, allowedRoles: ['STAFF_MANAGER', 'SUPER_ADMIN'], method: method as 'PUT' | 'DELETE', path: '/api/admin/web/users/{userId}/roles/{roleCode}', fields: [idField('userId', 'User ID', 'path', 'user.id'), choice('roleCode', 'Account role', ['CUSTOMER', 'MERCHANT_OWNER', 'MERCHANT_STAFF', 'COURIER', 'RELAY_PARTNER', 'ADMIN', 'STAFF_MANAGER', 'SUPER_ADMIN'], 'path'), { ...bodyText('expectedUpdatedAt', 'Current server revision'), valueFrom: 'user.updatedAt', maxLength: 64 }, { ...bodyText('reason', 'Role change reason'), maxLength: 1000 }, keyField], confirmation: `${label} for this existing account? Existing merchant memberships and relay assignments must be reviewed separately; prior sessions are invalidated.`, readback: { controlId: 'user-access-management' } })),
     ],
@@ -117,6 +160,7 @@ export const adminControlCatalog: readonly AdminControlDescriptor[] = [
     actions: [{ id: 'set-membership', label: 'Set merchant membership', supported: true, allowedRoles: ['STAFF_MANAGER', 'SUPER_ADMIN'], method: 'PUT', path: '/api/admin/web/merchant-memberships/{merchantId}/{userId}/{roleCode}', fields: [idField('merchantId', 'Merchant ID', 'path', 'merchantId'), idField('userId', 'Existing user ID'), choice('roleCode', 'Membership role', ['MERCHANT_OWNER', 'MERCHANT_STAFF'], 'path'), { name: 'active', label: 'Membership active', type: 'boolean', location: 'body', required: true, defaultValue: true }, { ...bodyText('expectedUpdatedAt', 'Current merchant access revision'), valueFrom: 'updatedAt', maxLength: 64 }, { ...bodyText('reason', 'Membership change reason'), maxLength: 1000 }, keyField], confirmation: 'Apply this explicit merchant membership and invalidate this account’s previous sessions? This does not grant a global role or transfer legal ownership.', readback: { controlId: 'merchant-memberships' } }],
   },
   adminRead('merchants', 'merchants', 'Merchants', '/api/admin/web/merchants', cols('name', 'status', 'commissionRateBps', 'createdAt')),
+  ownerProfile('merchants', 'merchants', 'Vendor', 'merchantId'),
   merchantStoreControl,
   {
     id: 'catalog-customizations', group: 'catalog', label: 'Food options and supplements', supported: true,
@@ -351,3 +395,5 @@ export async function runAdminControlAction(controlId: string, actionId: string,
   }
   return result
 }
+
+export const adminControlsFor = (group: string, roles: readonly string[]) => adminControlCatalog.filter(item => item.group === group && (!item.allowedRoles?.length || item.allowedRoles.some(role => hasAdminRole(roles, role))))
