@@ -84,6 +84,24 @@ export function referenceText(row: unknown, field = "id", fallback = "Reference 
   for (const key of candidates) if (typeof data[key] === "string" && isValidReference(data[key], expectedKind)) return normalizeReference(data[key] as string)!;
   return data[field] === null || data[field] === undefined ? "—" : fallback;
 }
+const technicalDisplayFields = new Set([
+  "relayLockerGridId", "operationId", "messageId", "idempotencyKey", "receiptIdempotencyKey",
+  "refundIdempotencyKey", "collectionIdempotencyKey", "inspectionIdempotencyKey",
+  "dispatchIdempotencyKey", "depositIdempotencyKey", "revision", "expectedRevision",
+]);
+function technicalDisplayField(row: Record<string, unknown>, key: string): boolean {
+  if (technicalDisplayFields.has(key)) return true;
+  // A provider's external event identity remains necessary for reconciliation. Outbox/custody
+  // event UUIDs are local bookkeeping and must not be advertised as customer-facing references.
+  if (key === "eventId") return !(typeof row.provider === "string" && typeof row.paymentReference === "string");
+  return false;
+}
+export function humanRecordEntries(value: unknown): [string, unknown][] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const row = value as Record<string, unknown>;
+  return Object.entries(row).filter(([key]) => key !== "id" && !technicalDisplayField(row, key));
+}
+
 /** Render declared ID relationships and nested response DTOs without exposing internal IDs. */
 export function referenceDisplayValue(row: Record<string, unknown>, path: string): unknown {
   const parts = path.split("."); if (parts.some(key => ["__proto__", "prototype", "constructor"].includes(key))) return undefined; const field = parts.pop()!;
@@ -91,6 +109,7 @@ export function referenceDisplayValue(row: Record<string, unknown>, path: string
   for (const key of parts) parent = parent && typeof parent === "object" ? (parent as Record<string, unknown>)[key] : undefined;
   if (!parent || typeof parent !== "object") return undefined;
   const data = parent as Record<string, unknown>;
+  if (technicalDisplayField(data, field)) return undefined;
   return field === "id" || hasAdminReference(field) || Object.hasOwn(relationFields, field) || field === "finalPackageId" || field === "deliveryCode" ? referenceText(data, field === "deliveryCode" ? "id" : field) : data[field];
 }
 
@@ -101,7 +120,7 @@ export function referenceDisplayTree(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(referenceDisplayTree);
   if (!value || typeof value !== "object") return value;
   const data = value as Record<string, unknown>;
-  return Object.fromEntries(Object.entries(data).filter(([key]) => !["idempotencyKey", "receiptIdempotencyKey", "refundIdempotencyKey"].includes(key))
+  return Object.fromEntries(humanRecordEntries(data)
     .map(([key, item]) => [key, key === "id" || key === "deliveryCode" || hasAdminReference(key) || Object.hasOwn(relationFields, key)
       ? referenceText(data, key === "deliveryCode" ? "id" : key) : referenceDisplayTree(item)]));
 }

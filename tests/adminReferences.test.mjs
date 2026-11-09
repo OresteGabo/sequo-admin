@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   hasAdminReference,
-  readAdminReferences, resolveAdminReference, referenceText, referenceDisplayValue, referenceDisplayTree, adminReferenceKinds, referenceForId, clearAdminReferenceCache, rememberLegacyReference,
+  readAdminReferences, resolveAdminReference, referenceText, referenceDisplayValue, referenceDisplayTree, adminReferenceKinds, referenceForId, clearAdminReferenceCache, rememberLegacyReference, humanRecordEntries,
 } from "../src/adminReferences.ts";
 test("record choices use existing authenticated read routes and return only labels and IDs", async () => {
   const rows = await readAdminReferences("operatorUserId", async (path) => {
@@ -68,7 +68,8 @@ test("directory and display labels use only server-issued references while machi
   assert.equal(referenceText(row), "C12-345-6E6"); assert.equal(referenceText(row,"customerId"),"A12-345-6BJ");
   assert.equal(referenceDisplayValue(row,"customerId"),"A12-345-6BJ");
   assert.equal(referenceText({id:"legacy-only"}),"Reference unavailable");
-  assert.equal(referenceDisplayTree(row).id,"C12-345-6E6");
+  assert.equal(referenceDisplayTree(row).id,undefined);
+  assert.equal(referenceDisplayTree(row).publicReference,"C12-345-6E6");
   assert.equal(referenceDisplayTree(row).paymentReference,"PROVIDER-EXACT");
   assert.equal(referenceDisplayTree(row).idempotencyKey,undefined);
   assert.equal(row.id,"opaque-order"); assert.equal(row.idempotencyKey,"retry-exact");
@@ -98,4 +99,17 @@ test("named relationships never borrow a primary reference of a different entity
   assert.equal(referenceText({...order,checkoutReference:"C12-345-6E6"},"checkoutId"),"Reference unavailable");
   assert.equal(referenceText({...order,checkoutReference:"H00-000-0TP"},"checkoutId"),"H00-000-0TP");
   assert.equal(referenceText({id:"order-1",publicReference:"C12-345-6E6",checkoutId:null},"checkoutId"),"—");
+});
+
+test("advanced human details omit internal audit keys but retain external evidence and actor history", () => {
+  const custody = {id:"internal-audit-row",operationId:"operation-uuid",eventId:"custody-event-uuid",relayLockerGridId:"grid-uuid",idempotencyKey:"retry-uuid",revision:"opaque-revision",action:"RELAY_DROPOFF_RECORDED",actorUserId:"actor-id",actorReference:"A12-345-6BJ",createdAt:"2026-11-09T00:00:00Z",metadata:"Physical receipt checked"};
+  const display = referenceDisplayTree(custody);
+  for (const key of ["id","operationId","eventId","relayLockerGridId","idempotencyKey","revision"]) assert.equal(Object.hasOwn(display,key),false,key);
+  assert.equal(display.action,"RELAY_DROPOFF_RECORDED");assert.equal(display.actorUserId,"A12-345-6BJ");assert.equal(display.createdAt,custody.createdAt);assert.equal(display.metadata,custody.metadata);
+  assert.equal(referenceDisplayValue(custody,"operationId"),undefined);
+  assert.equal(humanRecordEntries(custody).some(([key])=>key==="eventId"),false);
+  const provider={id:"internal-callback-row",provider:"YAS",eventId:"EXTERNAL-PROVIDER-EVENT",paymentReference:"EXTERNAL-PAYMENT",providerReference:"EXTERNAL-ACCOUNT-REFERENCE",status:"PENDING"};
+  const external=referenceDisplayTree(provider);assert.equal(external.eventId,provider.eventId);assert.equal(external.paymentReference,provider.paymentReference);assert.equal(external.providerReference,provider.providerReference);
+  const proof={rawPin:"123456",qrNonce:"test-qr-value",lockerCode:"A-1",metadata:"Received"};assert.deepEqual(referenceDisplayTree(proof),proof);
+  assert.equal(custody.id,"internal-audit-row");assert.equal(custody.eventId,"custody-event-uuid");assert.equal(custody.idempotencyKey,"retry-uuid");
 });

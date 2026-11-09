@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import AdminIcon from "./AdminIcon.vue";
 import AdminReferenceInput from "./AdminReferenceInput.vue";
-import { hasAdminReference, referenceText, referenceDisplayValue, referenceDisplayTree, referenceForId, referenceSearchQuery } from "./adminReferences";
+import { hasAdminReference, referenceText, referenceDisplayValue, referenceDisplayTree, referenceForId, referenceSearchQuery, humanRecordEntries } from "./adminReferences";
 import CatalogOptionsEditor from "./CatalogOptionsEditor.vue";
 import MerchantStoreEditor from "./MerchantStoreEditor.vue";
 import {
@@ -157,7 +157,7 @@ function text(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (Array.isArray(value)) return value.map(text).join(", ");
   if (typeof value === "object")
-    return Object.entries(value as Record<string, unknown>)
+    return humanRecordEntries(value)
       .map(([key, item]) => `${human(key)}: ${text(referenceDisplayValue(value as Record<string, unknown>, key))}`)
       .join(" · ");
   return String(value);
@@ -981,7 +981,7 @@ defineExpose({ refresh, openControl, openAction });
         <details v-if="selectedRecord" class="record-details">
           <summary>Selected record details</summary>
           <dl>
-            <div v-for="(value, key) in selectedRecord" :key="key">
+            <div v-for="([key, value]) in humanRecordEntries(selectedRecord)" :key="key">
               <dt>{{ human(String(key)) }}</dt>
               <dd>{{ text(referenceDisplayValue(selectedRecord!, String(key))) }}</dd>
             </div>
