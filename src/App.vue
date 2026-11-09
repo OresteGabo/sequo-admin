@@ -213,7 +213,8 @@ type AdminOrderRow = {
 };
 
 const apiBaseUrl =
-  import.meta.env.VITE_SEQUO_API_BASE_URL ?? "http://localhost:8080";
+  import.meta.env.VITE_SEQUO_API_BASE_URL ??
+  (import.meta.env.DEV ? "http://localhost:8080" : "https://api.sequoservice.com");
 const releaseId = (import.meta.env.VITE_SEQUO_RELEASE_ID ?? "").trim();
 const releaseEnvironment = (
   import.meta.env.VITE_SEQUO_RELEASE_ENVIRONMENT ?? ""
@@ -868,6 +869,10 @@ async function requestEmailCode() {
       },
       body: JSON.stringify({ email: email.value.trim() }),
     });
+    if (response.status === 503) {
+      authError.value = "Email sign-in is temporarily unavailable. Please contact SEQUO support.";
+      return;
+    }
     if (!response.ok) throw new Error("request_failed");
     const body = (await response.json()) as AdminEmailCodeRequestResponse;
     emailCodeRequested.value = true;
