@@ -88,7 +88,7 @@ const ownerProfile = (kind: 'accounts' | 'merchants' | 'couriers' | 'hubs', grou
   return { id: `owner-${kind}`, group, label: `${label} profile and removal`, supported: true, allowedRoles: ['SUPER_ADMIN'],
     description: kind === 'accounts' ? 'Edit a personnel display name here. Use Account access and roles to suspend or restore access, remove roles, or appoint administrators. Email and phone changes require identity verification.'
       : `Edit and remove ${label.toLowerCase()} profiles from service while keeping their orders, earnings and actor history. Resolve active work before removal. ${kind === 'hubs' ? 'Use hub setup above to change the name, address and storage slots.' : kind === 'couriers' ? 'Use Riders and workforce for contract classification; edit the linked account in Users to change the name.' : 'Use Store location and opening hours for shop address and schedules.'}`,
-    read: { path, fields: [reference], shape: 'record', rowId: 'record.id', columns: cols('record.id', 'record.name', 'record.email', 'record.phoneNumber', 'record.userId', 'record.ownerUserId', 'record.status', 'record.roles', 'record.vehicleType', 'record.updatedAt', 'history') }, actions }
+    read: { path, fields: [reference], shape: 'record', rowId: 'record.id', columns: kind === 'accounts' ? cols('record.id', 'record.name', 'record.email', 'record.phoneNumber', 'record.status', 'record.roles', 'record.updatedAt', 'history') : kind === 'couriers' ? cols('record.id', 'record.vehicleType', 'record.status', 'record.updatedAt', 'history') : cols('record.id', 'record.name', 'record.status', 'record.updatedAt', 'history') }, actions }
 }
 
 export const adminControlCatalog: readonly AdminControlDescriptor[] = [
