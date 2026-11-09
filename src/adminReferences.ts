@@ -4,7 +4,7 @@ export type AdminReference = { id: string; label: string; publicReference?: stri
 export const adminReferenceKinds: Record<string, PublicReferenceKind> = {
   merchantId: "MERCHANT", ownerMerchantId: "MERCHANT", sellerId: "MERCHANT",
   userId: "USER", operatorUserId: "USER", ownerUserId: "USER", customerId: "USER",
-  actorUserId: "USER", updatedByUserId: "USER", approvedByUserId: "USER",
+  actorUserId: "USER", updatedByUserId: "USER", approvedByUserId: "USER", pickupProofActorId: "USER", dropoffProofActorId: "USER",
   courierId: "COURIER", replacementCourierId: "COURIER", relayPointId: "RELAY", siteId: "RELAY",
   productId: "PRODUCT", orderId: "ORDER", missionId: "DELIVERY", deliveryMissionId: "DELIVERY",
   cooperativeId: "COOPERATIVE", manifestId: "GROUP", returnId: "RETURN", parcelId: "PARCEL",
@@ -63,7 +63,7 @@ const relationFields: Record<string, string[]> = {
   beforeValue: ["beforeReference"], afterValue: ["afterReference"], siteId: ["relayReference"], sourceOrderItemId: ["sourceOrderItemReference", "merchantOrderReference", "merchantSubOrderReference"], orderId: ["orderReference"], customerId: ["customerReference"], merchantId: ["merchantReference"], sellerId: ["merchantReference", "sellerReference"],
   ownerMerchantId: ["ownerMerchantReference", "merchantReference"], ownerUserId: ["ownerReference", "ownerUserReference"],
   userId: ["userReference"], collectingOperatorId: ["collectingOperatorReference"], receivingOperatorId: ["receivingOperatorReference"], inspectingOperatorId: ["inspectingOperatorReference"], requestedByUserId: ["requestedByReference", "actorReference"], reviewedByUserId: ["reviewedByReference", "reviewerReference", "actorReference"], sourceId: ["sourceReference"], entityId: ["entityReference"], aggregateId: ["aggregateReference"], actorUserId: ["actorReference"], updatedByUserId: ["actorReference", "updatedByReference"], approvedByUserId: ["approvedByReference", "actorReference"],
-  courierId: ["courierReference"], operatorUserId: ["operatorReference"], relayPointId: ["relayReference", "relayPointReference"],
+  courierId: ["courierReference"], replacementCourierId: ["replacementCourierReference"], pickupProofActorId: ["pickupProofActorReference"], dropoffProofActorId: ["dropoffProofActorReference"], operatorUserId: ["operatorReference"], relayPointId: ["relayReference", "relayPointReference"],
   productId: ["productReference"], deliveryMissionId: ["deliveryReference", "missionReference"], missionId: ["deliveryReference", "missionReference"],
   merchantSubOrderId: ["merchantOrderReference", "merchantSubOrderReference", "subOrderReference"], subOrderId: ["merchantOrderReference", "merchantSubOrderReference", "subOrderReference"],
   returnId: ["returnReference"], parcelId: ["parcelReference"], relayParcelId: ["parcelReference"],
@@ -75,12 +75,13 @@ export function referenceText(row: unknown, field = "id", fallback = "Reference 
   if (!row || typeof row !== "object") return fallback;
   const data = row as Record<string, unknown>;
   const extraKinds: Record<string, PublicReferenceKind> = {
-    finalPackageId: "PACKAGE", collectingOperatorId: "USER", receivingOperatorId: "USER", inspectingOperatorId: "USER", requestedByUserId: "USER", reviewedByUserId: "USER", beforeValue: "USER", afterValue: "USER",
+    subOrderCode: "MERCHANT_ORDER", finalPackageId: "PACKAGE", collectingOperatorId: "USER", receivingOperatorId: "USER", inspectingOperatorId: "USER", requestedByUserId: "USER", reviewedByUserId: "USER", beforeValue: "USER", afterValue: "USER",
   };
   const sourceKinds: Record<string, PublicReferenceKind> = { DeliveryMission: "DELIVERY", OrderItem: "MERCHANT_ORDER", MerchantSubOrder: "MERCHANT_ORDER", Order: "ORDER", ReturnRequest: "RETURN" };
   const expectedKind = adminReferenceKinds[field] ?? extraKinds[field] ?? (field === "sourceId" && typeof data.sourceType === "string" ? sourceKinds[data.sourceType] : undefined)
     ?? (field === "entityId" ? data.kind === "MERCHANT" ? "MERCHANT" : data.kind === "COURIER" ? "COURIER" : undefined : undefined);
-  const candidates = [...(relationFields[field] ?? []), ...(["id", "checkoutId", "manifestId", "missionId", "subOrderId", "parcelId"].includes(field) ? ["publicReference"] : [])];
+  if (field === "sourceId" && expectedKind === undefined) return data[field] === null || data[field] === undefined ? "—" : fallback;
+  const candidates = [...(relationFields[field] ?? []), ...(field === "sourceId" && data.sourceType === "DeliveryMission" ? ["missionReference"] : []), ...(["id", "checkoutId", "manifestId", "missionId", "subOrderId", "subOrderCode", "parcelId"].includes(field) ? ["publicReference"] : [])];
   for (const key of candidates) if (typeof data[key] === "string" && isValidReference(data[key], expectedKind)) return normalizeReference(data[key] as string)!;
   return data[field] === null || data[field] === undefined ? "—" : fallback;
 }
@@ -110,7 +111,7 @@ export function referenceDisplayValue(row: Record<string, unknown>, path: string
   if (!parent || typeof parent !== "object") return undefined;
   const data = parent as Record<string, unknown>;
   if (technicalDisplayField(data, field)) return undefined;
-  return field === "id" || hasAdminReference(field) || Object.hasOwn(relationFields, field) || field === "finalPackageId" || field === "deliveryCode" ? referenceText(data, field === "deliveryCode" ? "id" : field) : data[field];
+  return field === "id" || hasAdminReference(field) || Object.hasOwn(relationFields, field) || field === "finalPackageId" || (field === "deliveryCode" || field === "subOrderCode") ? referenceText(data, field === "deliveryCode" ? "id" : field) : data[field];
 }
 
 export const referenceField = (name: string, label: string): AdminControlField => ({ name, label, type: "string", location: "body", required: true, maxLength: 128 });
@@ -121,7 +122,7 @@ export function referenceDisplayTree(value: unknown): unknown {
   if (!value || typeof value !== "object") return value;
   const data = value as Record<string, unknown>;
   return Object.fromEntries(humanRecordEntries(data)
-    .map(([key, item]) => [key, key === "id" || key === "deliveryCode" || hasAdminReference(key) || Object.hasOwn(relationFields, key)
+    .map(([key, item]) => [key, key === "id" || key === "deliveryCode" || key === "subOrderCode" || hasAdminReference(key) || Object.hasOwn(relationFields, key)
       ? referenceText(data, key === "deliveryCode" ? "id" : key) : referenceDisplayTree(item)]));
 }
 

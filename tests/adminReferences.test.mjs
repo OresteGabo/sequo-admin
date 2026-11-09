@@ -113,3 +113,29 @@ test("advanced human details omit internal audit keys but retain external eviden
   const proof={rawPin:"123456",qrNonce:"test-qr-value",lockerCode:"A-1",metadata:"Received"};assert.deepEqual(referenceDisplayTree(proof),proof);
   assert.equal(custody.id,"internal-audit-row");assert.equal(custody.eventId,"custody-event-uuid");assert.equal(custody.idempotencyKey,"retry-uuid");
 });
+
+test("merchant preparation displays the authoritative M reference rather than the retained legacy sub-order code", () => {
+  const row = {id:"persisted-sub-order-id",subOrderCode:"SQ-legacy-internal-derived-code",publicReference:"MAB-CDE-FJZ",orderId:"parent-order-id",orderReference:"C12-345-6E6"};
+  assert.equal(referenceDisplayValue(row,"subOrderCode"),"MAB-CDE-FJZ");
+  assert.equal(referenceDisplayTree(row).subOrderCode,"MAB-CDE-FJZ");
+  assert.equal(referenceDisplayValue({...row,publicReference:"C12-345-6E6"},"subOrderCode"),"Reference unavailable");
+  assert.equal(row.subOrderCode,"SQ-legacy-internal-derived-code");assert.equal(row.id,"persisted-sub-order-id");
+});
+
+test("a DeliveryMission ledger source uses its actual D relation without borrowing its W entry identity", () => {
+  const ledger = {id:"ledger-entry",publicReference:encodeReference("LEDGER","000000"),sourceId:"mission-id",sourceType:"DeliveryMission",missionReference:"DZ9-X8W-7P3"};
+  assert.equal(referenceText(ledger,"sourceId"),"DZ9-X8W-7P3");
+  assert.equal(referenceText({...ledger,missionReference:ledger.publicReference},"sourceId"),"Reference unavailable");
+  assert.equal(referenceText({...ledger,sourceType:"ImportedUnknown",sourceReference:ledger.publicReference},"sourceId"),"Reference unavailable");
+  assert.equal(referenceText({...ledger,sourceType:"OrderItem"},"sourceId"),"Reference unavailable");
+  assert.equal(ledger.sourceId,"mission-id");
+});
+test("mission proof actors and replacement courier use the corresponding typed server reference only", () => {
+  const mission = {pickupProofActorId:"pickup-user-id",pickupProofActorReference:"A12-345-6BJ",dropoffProofActorId:"dropoff-user-id",dropoffProofActorReference:"A12-345-6BJ",replacementCourierId:"replacement-profile-id",replacementCourierReference:"TZ9-X8W-791"};
+  assert.equal(referenceDisplayValue(mission,"pickupProofActorId"),"A12-345-6BJ");
+  assert.equal(referenceDisplayValue(mission,"dropoffProofActorId"),"A12-345-6BJ");
+  assert.equal(referenceDisplayValue(mission,"replacementCourierId"),"TZ9-X8W-791");
+  assert.equal(referenceDisplayValue({...mission,pickupProofActorReference:"TZ9-X8W-791"},"pickupProofActorId"),"Reference unavailable");
+  assert.equal(referenceDisplayValue({...mission,replacementCourierReference:"A12-345-6BJ"},"replacementCourierId"),"Reference unavailable");
+  assert.equal(mission.pickupProofActorId,"pickup-user-id");assert.equal(mission.replacementCourierId,"replacement-profile-id");
+});
