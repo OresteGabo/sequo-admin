@@ -2,12 +2,14 @@
 import { referenceText, referenceDisplayTree } from "./adminReferences";
 import AdminReferenceInput from './AdminReferenceInput.vue'
 import type { AdminControlField } from './adminControls'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { canManagePersonnel } from './adminPermissions'
 import { relayAcknowledged, relayConfirmed, relayIntent, validRelayIntent, parseRelaySites, parseRelaySetup, parseRelayMission, type RelayAction, type RelayIntent, type RelayMutation, type RelaySetup, type RelaySite, type RelaySlot } from './relayAdministration'
 type Request = <T>(path: string, retryAfterRefresh?: boolean, method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: unknown) => Promise<T>
 type Mission = { id: string; orderId: string; relayPointId: string | null; status: string; destinationType: string; pickupAt: string | null; updatedAt: string; courierId: string | null }
 const missionField: AdminControlField = { name: 'missionId', label: 'Delivery mission', type: 'string', location: 'path', required: true, maxLength: 128 }
-const props = defineProps<{ request: Request; actorId: string }>()
+const props = defineProps<{ request: Request; actorId: string; roles: readonly string[] }>()
+const canManageSite = computed(() => canManagePersonnel(props.roles))
 const emit = defineEmits<{ changed: [] }>()
 const storageKey = `sequo_relay_admin_pending:${props.actorId}`
 const rows = ref<RelaySite[]>([]), selected = ref<RelaySetup | null>(null), siteId = ref(''), error = ref(''), notice = ref(''), busy = ref(false), stale = ref(true)
@@ -46,6 +48,7 @@ function newSite() {
 }
 function chooseSite() { reason.value = ''; mission.value = null; physicalReceipt.value = false; depositSlotId.value = ''; void run(() => load()) }
 async function write(action: RelayAction, body?: Record<string, unknown>, slotId?: string) {
+  if (['CREATE_SITE', 'UPDATE_SITE'].includes(action) && !canManageSite.value) throw Error('Staff manager or owner access is required to manage relay sites.')
   if (!pending.value) {
     if (stale.value || !body) return
     const preview = action === 'SEQUO_DEPOSIT' ? `Confirm actual SEQUO physical receipt for mission ${referenceText(mission.value)}, order ${referenceText(mission.value, "orderId")}, slot ${selected.value?.slots.find(item => item.id === depositSlotId.value)?.lockerCode ?? "Selected slot"}?\nRecorded rider pickup must already exist; this does not create a pickup or change assignment.` :
@@ -94,9 +97,10 @@ onMounted(() => { if (pending.value) reason.value = String(pending.value.body.re
     <p v-if="busy" role="status">Loading server records…</p>
     <div v-if="pending" class="pending"><strong>Unconfirmed saved action: {{ pending.action }}</strong><p>Target: {{ selected ? referenceText(selected.site) : 'New site' }}. Inputs are frozen until its server result is confirmed.</p><button :disabled="busy" @click="run(() => write(pending!.action))">Retry saved action unchanged</button><button :disabled="busy" @click="discard">Discard local retry after review</button></div>
     <label>Recorded relay<select v-model="siteId" :disabled="busy || !!pending" @change="chooseSite"><option value="">Choose a site</option><option v-for="site in rows" :key="site.id" :value="site.id">{{ site.name }} · {{ site.status }}</option></select></label>
+    <p v-if="!canManageSite" class="subtle">Staff managers and owners manage relay locations. Operations can manage existing storage availability and delivery receipt.</p>
     <p v-if="!busy && !rows.length">No relay sites are recorded. Create the first site, then assign an existing authorized operator through relay management.</p>
-    <button :disabled="busy || !!pending" @click="newSite">Prepare new site</button>
-    <form @submit.prevent="submitSite">
+    <button v-if="canManageSite" :disabled="busy || !!pending" @click="newSite">Prepare new site</button>
+    <form v-if="canManageSite" @submit.prevent="submitSite">
       <fieldset :disabled="busy || !!pending || stale"><legend>{{ selected ? 'Recorded site details' : 'New relay site' }}</legend>
         <label>Name<input v-model="name" required maxlength="120"></label><div class="coordinates"><label>Latitude<input v-model="latitude" inputmode="decimal" required></label><label>Longitude<input v-model="longitude" inputmode="decimal" required></label></div>
         <label>City<input v-model="city" maxlength="128"></label><label>Neighborhood<input v-model="neighborhood" maxlength="128"></label><label>Landmark / access instructions<input v-model="landmark" maxlength="500"></label>

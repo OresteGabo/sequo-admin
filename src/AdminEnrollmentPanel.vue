@@ -64,7 +64,7 @@ async function confirm() {
 <template>
   <section class="panel enrollment-panel">
     <div class="panel-heading"><div><h2>{{ title }}</h2><p>Choose an existing {{ kind === 'merchant' ? 'merchant' : 'rider' }} account to register its {{ kind === 'merchant' ? 'store' : 'delivery profile' }}.</p></div></div>
-    <p class="subtle">A super administrator can manage account access and roles in Users.</p>
+    <p class="subtle">Staff managers approve or suspend personnel in Users. Only an owner can change administrator access.</p>
     <form class="enrollment-lookup" @submit.prevent="load">
       <label>Existing account<AdminReferenceInput v-if="!pending" v-model="userId" :field="userField" :request="request" /><span v-else>{{ referenceText(snapshot?.user) }}</span></label>
       <button class="secondary" type="submit" :disabled="loading || busy || !actorId || !userId.trim()">{{ loading ? 'Loading account…' : 'Refresh account and history' }}</button>

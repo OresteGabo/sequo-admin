@@ -4,7 +4,7 @@ export type FixtureAccount = { publicReference?: string; id: string; name: strin
 export type FixtureScenario = { id: string; title: string; summary: string; category: AdminControlGroup | 'dashboard'; resourceIds: Record<string, string>; resourceReferences?: Record<string, string>; nextActions: string[]; credentials: Record<string, string> }
 export type LocalFixtureManifest = { environment: 'LOCAL_FIXTURE'; namespace: 'local-ops-v1'; version: 1; seededAt: string | null; accounts: FixtureAccount[]; scenarios: FixtureScenario[]; note: string }
 const categories = new Set(['dashboard', 'users', 'merchants', 'catalog', 'riders', 'orders', 'deliveries', 'relay', 'returns', 'payments', 'commissions', 'negotiations', 'cooperatives', 'benefits', 'notifications', 'audit', 'settings'])
-const roles = new Set(['CUSTOMER', 'MERCHANT_OWNER', 'MERCHANT_STAFF', 'COURIER', 'RELAY_PARTNER', 'SUPPORT_AGENT', 'ADMIN', 'SUPER_ADMIN'])
+const roles = new Set(['CUSTOMER', 'MERCHANT_OWNER', 'MERCHANT_STAFF', 'COURIER', 'RELAY_PARTNER', 'SUPPORT_AGENT', 'ADMIN', 'STAFF_MANAGER', 'SUPER_ADMIN'])
 const privateKey = /token|secret|password|authorization|bearer|session|api.?key/i
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(value)

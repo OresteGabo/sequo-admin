@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { canManageAccount, grantableRoles, hasAdminRole } from "./adminPermissions";
 import AdminIcon from "./AdminIcon.vue";
 import AdminReferenceInput from "./AdminReferenceInput.vue";
 import { hasAdminReference, referenceText, referenceDisplayValue, referenceDisplayTree, referenceForId, referenceSearchQuery, humanRecordEntries } from "./adminReferences";
@@ -163,6 +164,8 @@ function text(value: unknown): string {
   return String(value);
 }
 function human(value: string): string {
+  const tiers: Record<string, string> = { ADMIN: "Operations (support included)", STAFF_MANAGER: "Staff manager", SUPER_ADMIN: "Owner", SUPPORT_AGENT: "Legacy support (read only)" };
+  if (tiers[value]) return tiers[value]!;
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replaceAll("_", " ")
@@ -207,15 +210,15 @@ function reset(
       values[field.name] = crypto.randomUUID();
   });
 }
+function fieldOptions(field: AdminControlField): readonly string[] {
+  return field.name === 'roleCode' ? (field.options || []).filter(role => grantableRoles(props.roles).includes(role)) : field.options || [];
+}
 function canAct(item: AdminControlAction): boolean {
-  return (
-    item.supported &&
-    (!(item as AdminControlAction & { allowedRoles?: readonly string[] })
-      .allowedRoles?.length ||
-      (
-        item as AdminControlAction & { allowedRoles?: readonly string[] }
-      ).allowedRoles!.some((role) => props.roles.includes(role)))
-  );
+  if (!item.supported || (item.allowedRoles?.length && !item.allowedRoles.some(role => hasAdminRole(props.roles, role)))) return false;
+  if (item.path.startsWith('/api/admin/web/users/')) {
+    return canManageAccount(props.roles, props.actorId, selectedRecord.value?.user, item.path.endsWith('/access'));
+  }
+  return true;
 }
 function chooseRecord(row: Record<string, unknown>) {
   selectedRecord.value = row;
@@ -630,7 +633,7 @@ defineExpose({ refresh, openControl, openAction });
             >
               <option v-if="!field.required" value="">Any</option>
               <option
-                v-for="option in field.options"
+                v-for="option in fieldOptions(field)"
                 :key="option"
                 :value="option"
               >
@@ -873,7 +876,7 @@ defineExpose({ refresh, openControl, openAction });
                       {{ field.required ? "Select…" : "Leave unchanged" }}
                     </option>
                     <option
-                      v-for="option in field.options"
+                      v-for="option in fieldOptions(field)"
                       :key="option"
                       :value="option"
                     >

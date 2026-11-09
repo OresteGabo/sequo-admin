@@ -24,6 +24,7 @@ import AdminIcon from "./AdminIcon.vue";
 import OperationsControlPanel from "./OperationsControlPanel.vue";
 import LocalFixtureGuide from "./LocalFixtureGuide.vue";
 import AdminProductMediaPanel from "./AdminProductMediaPanel.vue";
+import { adminTierLabel, canManagePersonnel } from "./adminPermissions";
 import AdminEnrollmentPanel from "./AdminEnrollmentPanel.vue";
 import RelayAdministrationPanel from "./RelayAdministrationPanel.vue";
 
@@ -62,6 +63,7 @@ type RoleCode =
   | "RELAY_PARTNER"
   | "SUPPORT_AGENT"
   | "ADMIN"
+  | "STAFF_MANAGER"
   | "SUPER_ADMIN";
 
 type CurrentUser = {
@@ -298,7 +300,7 @@ const isAdmin = computed(() =>
   Boolean(
     currentUser.value?.active &&
     currentUser.value.roles.some(
-      (role) => role === "ADMIN" || role === "SUPER_ADMIN",
+      (role) => ["ADMIN", "STAFF_MANAGER", "SUPER_ADMIN"].includes(role),
     ),
   ),
 );
@@ -604,6 +606,7 @@ const roleOptions: Array<"ALL" | RoleCode> = [
   "RELAY_PARTNER",
   "SUPPORT_AGENT",
   "ADMIN",
+  "STAFF_MANAGER",
   "SUPER_ADMIN",
 ];
 const displayedUsers = computed(() => {
@@ -765,7 +768,7 @@ async function verifySession() {
     if (
       !user.active ||
       !Array.isArray(user.roles) ||
-      !user.roles.some((role) => role === "ADMIN" || role === "SUPER_ADMIN")
+      !user.roles.some((role) => ["ADMIN", "STAFF_MANAGER", "SUPER_ADMIN"].includes(role))
     ) {
       clearSession();
       authError.value = "This account is not allowed to use SEQUO Admin.";
@@ -1353,7 +1356,7 @@ async function apiRequest<T>(
       stillAdmin = Boolean(
         user?.active &&
         Array.isArray(user.roles) &&
-        user.roles.some((role) => role === "ADMIN" || role === "SUPER_ADMIN"),
+        user.roles.some((role) => ["ADMIN", "STAFF_MANAGER", "SUPER_ADMIN"].includes(role)),
       );
     } catch {
       stillAdmin = false;
@@ -1432,9 +1435,10 @@ function formatCount(value: number): string {
 function humanize(value?: string | null): string {
   if (!value) return "Not available";
   const specialLabels: Record<string, string> = {
-    ADMIN: "Admin",
-    SUPER_ADMIN: "Super admin",
-    SUPPORT_AGENT: "Support",
+    ADMIN: "Operations (support included)",
+    STAFF_MANAGER: "Staff manager",
+    SUPER_ADMIN: "Owner",
+    SUPPORT_AGENT: "Legacy support (read only)",
     CUSTOMER: "Customer",
     COURIER: "Courier",
     MERCHANT_OWNER: "Merchant owner",
@@ -2268,9 +2272,7 @@ function onWorkspaceLocation() {
           ><span
             ><strong>{{ currentUser?.displayName || "SEQUO Admin" }}</strong
             ><small>{{
-              currentUser?.roles.includes("SUPER_ADMIN")
-                ? "Super administrator"
-                : "Administrator"
+              adminTierLabel(currentUser?.roles || [])
             }}</small></span
           ><button
             class="icon-button"
@@ -3035,7 +3037,7 @@ function onWorkspaceLocation() {
           </article>
 
           <AdminEnrollmentPanel
-            v-if="currentUser && (active.id === 'merchants' || active.id === 'riders')"
+            v-if="currentUser && canManagePersonnel(currentUser.roles) && (active.id === 'merchants' || active.id === 'riders')"
             :key="`${currentUser.id}:${active.id}`"
             :kind="active.id === 'merchants' ? 'merchant' : 'courier'"
             :request="apiRequest"
@@ -3055,6 +3057,7 @@ function onWorkspaceLocation() {
             :key="currentUser.id"
             :request="apiRequest"
             :actor-id="currentUser.id"
+            :roles="currentUser.roles"
             @changed="onControlChanged"
           />
           <OperationsControlPanel

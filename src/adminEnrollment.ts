@@ -40,7 +40,7 @@ export async function readEnrollment(request: AdminControlRequest, userId: strin
 export function prepareEnrollment(kind: EnrollmentKind, actorId: string, draft: EnrollmentDraft, snapshot: EnrollmentSnapshot, key: string): EnrollmentIntent {
   if (snapshot.user.id !== draft.userId || snapshot.user.id === actorId) throw Error('Select another existing account and load its current details.')
   const role = kind === 'merchant' ? 'MERCHANT_OWNER' : 'COURIER'
-  if (!snapshot.user.active || snapshot.user.status !== 'ACTIVE' || !snapshot.user.roles.includes(role)) throw Error(`Select an active account with ${role}. A SUPER_ADMIN must grant the role separately; enrollment never grants it.`)
+  if (!snapshot.user.active || snapshot.user.status !== 'ACTIVE' || !snapshot.user.roles.includes(role)) throw Error(`Select an active account with ${role}. A staff manager or owner must grant the personnel role separately; enrollment never grants it.`)
   const body: Record<string, string> = { userId: id(draft.userId), expectedUserUpdatedAt: date(snapshot.user.updatedAt), reason: text(draft.reason.trim(), 1000), idempotencyKey: id(key) }
   if (kind === 'merchant') {
     body.name = text(draft.name.trim(), 160)
