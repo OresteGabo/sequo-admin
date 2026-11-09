@@ -1952,9 +1952,7 @@ function onWorkspaceLocation() {
   <main v-if="!isAuthenticated" class="auth-shell" aria-label="Admin login">
     <section class="auth-story">
       <div class="auth-brand">
-        <img src="/brand/sequo-icon-green.png" alt="" /><span
-          >SEQUO<span class="brand-caption">OPERATIONS</span></span
-        >
+        <span class="brand-lockup"><img class="brand-logo" src="/brand/sequo-logo-horizontal.svg" alt="SEQUO" /><span class="brand-caption">OPERATIONS</span></span>
       </div>
       <div class="auth-story-content">
         <span class="auth-kicker"
@@ -2208,10 +2206,7 @@ function onWorkspaceLocation() {
     />
     <aside class="sidebar">
       <div class="brand">
-        <img class="brand-icon" src="/brand/sequo-icon-green.png" alt="" /><span
-          class="brand-wordmark"
-          >SEQUO<small>ADMIN WORKSPACE</small></span
-        ><button
+        <span class="brand-lockup"><img class="brand-logo" src="/brand/sequo-logo-light.svg" alt="SEQUO" /><small class="brand-caption">ADMIN WORKSPACE</small></span><button
           type="button"
           class="icon-button sidebar-close"
           aria-label="Close navigation"
@@ -2221,8 +2216,7 @@ function onWorkspaceLocation() {
         </button>
       </div>
       <div class="workspace-switch">
-        <span class="workspace-mark">S</span
-        ><span
+        <img class="workspace-mark" src="/brand/sequo-app-icon.svg" alt="" /><span
           ><strong>SEQUO Operations</strong
           ><small>{{
             developmentAccess ? "Development workspace" : "Management workspace"

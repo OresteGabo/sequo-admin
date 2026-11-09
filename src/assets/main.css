@@ -2210,3 +2210,10 @@ fieldset {
   gap: 9px;
   margin: 16px 0;
 }
+
+/* Shared SEQUO vector lockup; captions stay separate from the brand artwork. */
+.brand-lockup { display: flex; flex-direction: column; min-width: 0; }
+.auth-brand .brand-logo { width: 210px; max-width: 100%; height: auto; border-radius: 0; }
+.brand .brand-logo { width: 170px; max-width: 100%; height: auto; border-radius: 0; }
+.brand .brand-caption { font-size: 10px; letter-spacing: 1.4px; color: #6f7b73; margin-top: 4px; }
+.workspace-mark { object-fit: contain; }
